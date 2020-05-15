@@ -28,7 +28,7 @@ public class Record {
     private String tableOfContents;
 
     public String getYear() {
-        return year;
+        return year != null ? year : "";
     }
 
     public void setYear(String year) {
@@ -36,7 +36,7 @@ public class Record {
     }
 
     public String getTitle() {
-        return title;
+        return title != null ? title : "";
     }
 
     public void setTitle(String title) {
@@ -44,7 +44,7 @@ public class Record {
     }
 
     public String getIsbn13() {
-        return isbn13;
+        return isbn13 != null ? isbn13 : "";
     }
 
     public void setIsbn13(String isbn13) {
@@ -68,7 +68,7 @@ public class Record {
     }
 
     public String getDescriptionBrief() {
-        return descriptionBrief;
+        return descriptionBrief != null ? descriptionBrief : "";
     }
 
     public void setDescriptionBrief(String descriptionBrief) {
@@ -76,7 +76,7 @@ public class Record {
     }
 
     public String getDescriptionFull() {
-        return descriptionFull;
+        return descriptionFull != null ? descriptionFull : "";
     }
 
     public void setDescriptionFull(String descriptionFull) {
@@ -84,45 +84,11 @@ public class Record {
     }
 
     public String getTableOfContents() {
-        return tableOfContents;
+        return tableOfContents != null ? tableOfContents : "";
     }
 
     public void setTableOfContents(String tableOfContents) {
         this.tableOfContents = tableOfContents;
     }
-
-//        @XmlAnyElement
-//        public Element[] others;
-//
-//        public Element[] getOthers() {
-//            return others;
-//        }
-//
-//        public void setOthers(Element[] others) {
-//            this.others = others;
-//        }
-
-//        <ISBN13>9780864430793</ISBN13><ISBN13H>978-0-86443-079-3</ISBN13H><ISBN13S>978 0 86443 079 3</ISBN13S><FTS>
-//        The Van
-//        Der Most Report:
-//        a P.
-//        I.D.View of Soekarno'sP.N.I.</FTS><CR1>A01</CR1>
-//
-//        <CRT1>By (author)</CRT1>
-//        <CCI1>N</CCI1>
-//        <CNI1>Most, B. R. van der</CNI1>
-//        <CR1>A01</CR1>
-//        <CRT1>By (author)</CRT1>
-//        <CCI1>N</CCI1>
-//        <ICFN1>B. R. van der</ICFN1>
-//        <ICKN1>Most</ICKN1>
-//        <PFC>MC</PFC>
-//        <PFCT>Microfilm</PFCT>
-//        <IMPN>James Cook University of North Queensland</IMPN>
-//        <PUBN>James Cook University of North Queensland</PUBN>
-//        <POP>Townsville, QLD</POP>
-//        <COP>Australia</COP>
-//        <DEWS1>DC19</DEWS1>
-//        <DEWEY1>324.259803</DEWEY1>
 
 }

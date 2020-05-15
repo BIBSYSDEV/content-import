@@ -12,8 +12,8 @@ import com.fasterxml.jackson.dataformat.xml.XmlMapper;
 
 public class NielsenFileReader {
 
-    private static final String CONTENTS_DIR = "/workspace/contents/";
-    private static final String IMAGE_DIR = "/workspace/contents/images";
+    private static final String CONTENTS_DIR = "e:\\innhold\\Nielsen\\data\\test";
+    private static final String IMAGE_DIR = "e:\\innhold\\Nielsen\\images";
 
     private void readFiles() {
         final List<String> isbnList = new ArrayList<>();
@@ -90,61 +90,62 @@ public class NielsenFileReader {
     public static void main(String... args) {
 //        new NielsenFileReader().readFiles();
         XmlMapper mapper = new XmlMapper();
+        
 //        mapper.enable(DeserializationFeature.ACCEPT_EMPTY_STRING_AS_NULL_OBJECT);
-        try {
-            List<Record> records = new ArrayList<Record>();
-
-            long start = System.currentTimeMillis();
-            Files.list(Paths.get(CONTENTS_DIR))
-                    .filter(file -> !Files.isDirectory(file))
-                    .forEach(file -> {
-                        try {
-                            records.addAll(mapper.readValue(file.toFile(), NielsenBook.class).getRecord());
-                        } catch (IOException e) {
-                            e.printStackTrace();
-                        }
-                    });
-//            AtomicInteger imageCounter = new AtomicInteger();
-//            int imageCount =
+//        try {
+//            List<Record> records = new ArrayList<Record>();
+//
+//            long start = System.currentTimeMillis();
+//            Files.list(Paths.get(CONTENTS_DIR))
+//                    .filter(file -> !Files.isDirectory(file))
+//                    .forEach(file -> {
+//                        try {
+//                            records.addAll(mapper.readValue(file.toFile(), NielsenBook.class).getRecord());
+//                        } catch (IOException e) {
+//                            e.printStackTrace();
+//                        }
+//                    });
+////            AtomicInteger imageCounter = new AtomicInteger();
+////            int imageCount =
+////                    records.stream()
+////                            .filter(record -> {
+////                                if (imageCounter.incrementAndGet() % 1000 == 0)
+////                                    System.out.println(imageCounter);
+////                                return Files
+////                                        .exists(Paths.get(String.format("%s/%s.jpg", IMAGE_DIR, record.getIsbn13())));
+////                            })
+////                            .collect(Collectors.toList()).size();
+//            System.out.println(System.currentTimeMillis() - start);
+//            System.out.println(records.size());
+//            AtomicInteger briefDesc = new AtomicInteger();
+//            AtomicInteger fullDesc = new AtomicInteger();
+//            AtomicInteger toc = new AtomicInteger();
+//            records.forEach(record -> {
+//                if (record.getDescriptionBrief() != null)
+//                    briefDesc.incrementAndGet();
+//                if (record.getDescriptionFull() != null)
+//                    fullDesc.incrementAndGet();
+//                if (record.getTableOfContents() != null)
+//                    toc.incrementAndGet();
+//            });
+//            System.out.printf("brief: %s%n", briefDesc.toString());
+//            System.out.printf("full: %s%n", fullDesc.toString());
+//            System.out.printf("toc: %s%n", toc.toString());
+////            System.out.println(imageCount);
+//
+//            List<Record> noDescription =
 //                    records.stream()
-//                            .filter(record -> {
-//                                if (imageCounter.incrementAndGet() % 1000 == 0)
-//                                    System.out.println(imageCounter);
-//                                return Files
-//                                        .exists(Paths.get(String.format("%s/%s.jpg", IMAGE_DIR, record.getIsbn13())));
-//                            })
-//                            .collect(Collectors.toList()).size();
-            System.out.println(System.currentTimeMillis() - start);
-            System.out.println(records.size());
-            AtomicInteger briefDesc = new AtomicInteger();
-            AtomicInteger fullDesc = new AtomicInteger();
-            AtomicInteger toc = new AtomicInteger();
-            records.forEach(record -> {
-                if (record.getDescriptionBrief() != null)
-                    briefDesc.incrementAndGet();
-                if (record.getDescriptionFull() != null)
-                    fullDesc.incrementAndGet();
-                if (record.getTableOfContents() != null)
-                    toc.incrementAndGet();
-            });
-            System.out.printf("brief: %s%n", briefDesc.toString());
-            System.out.printf("full: %s%n", fullDesc.toString());
-            System.out.printf("toc: %s%n", toc.toString());
-//            System.out.println(imageCount);
-
-            List<Record> noDescription =
-                    records.stream()
-                            .filter(record -> record.getDescriptionBrief() == null
-                                    && record.getDescriptionFull() == null && record.getTableOfContents() == null)
-                            .collect(Collectors.toList());
-            System.out.println(noDescription.size());
-            System.out.println(noDescription.stream()
-                    .filter(record -> !Files
-                            .exists(Paths.get(String.format("%s/%s.jpg", IMAGE_DIR, record.getIsbn13()))))
-                    .collect(Collectors.toList()).size());
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+//                            .filter(record -> record.getDescriptionBrief() == null
+//                                    && record.getDescriptionFull() == null && record.getTableOfContents() == null)
+//                            .collect(Collectors.toList());
+//            System.out.println(noDescription.size());
+//            System.out.println(noDescription.stream()
+//                    .filter(record -> !Files
+//                            .exists(Paths.get(String.format("%s/%s.jpg", IMAGE_DIR, record.getIsbn13()))))
+//                    .collect(Collectors.toList()).size());
+//        } catch (IOException e) {
+//            e.printStackTrace();
+//        }
     }
 
 }

@@ -21,10 +21,8 @@ public class ImageUtil {
         .filter(file -> file.getFileName().toString().endsWith(".jpg"))
         .forEach(file -> {
             String fileName = file.getFileName().toString().replace(".jpg", "");
-            String firstDirName = fileName.substring(fileName.length() - 1);
-            String secondDirName = fileName.substring(fileName.length() - 2, fileName.length() - 1);
-            Path dir = Paths.get(path, "\\", firstDirName, "\\", secondDirName);
-            Path finalFile = Paths.get(path, "\\", firstDirName, "\\", secondDirName, "\\", file.getFileName().toString());
+            Path dir = Paths.get(path, createSubPath(fileName));
+            Path finalFile = Paths.get(path, createSubPath(fileName));
             if(counter.incrementAndGet() % 1000 == 0) {
                 System.out.printf("%s\t - %s%n", counter.toString(), Integer.toString(total));
             }
@@ -38,8 +36,16 @@ public class ImageUtil {
         });
     }
 
+    public static String createSubPath(String fileName) {
+        String firstDirName = fileName.substring(fileName.length() - 1);
+        String secondDirName = fileName.substring(fileName.length() - 2, fileName.length() - 1);
+        StringBuilder subPath = new StringBuilder("").append(firstDirName).append("/").append(secondDirName);
+        return subPath.toString();
+    }
+
     public static void main(String... args) {
         try {
+            ImageUtil.organizeImages("E:\\innhold\\Nielsen\\images\\small");
             ImageUtil.organizeImages("E:\\innhold\\Nielsen\\images\\large");
             ImageUtil.organizeImages("E:\\innhold\\Nielsen\\images\\original");
         } catch (IOException e) {
