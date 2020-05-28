@@ -142,7 +142,7 @@ public class NielsenDatabaseUpdater {
 
     }
 
-    private Map<String, Set<String>> findMissingImages(List<Record> records) throws SQLException, IOException {
+    public static Map<String, Set<String>> findMissingImages(List<Record> records) throws SQLException, IOException {
         System.out.println("scanning images...");
 
         Set<String> smallSet = Files.list(Paths.get("e:\\innhold\\Nielsen\\images\\existing\\small")).map(path -> path.getFileName().toString()).collect(Collectors.toSet());

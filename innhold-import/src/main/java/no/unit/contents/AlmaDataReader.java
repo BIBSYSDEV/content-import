@@ -1,21 +1,26 @@
 package no.unit.contents;
 
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 import javax.xml.bind.JAXBContext;
 import javax.xml.bind.JAXBException;
+import javax.xml.bind.Marshaller;
 import javax.xml.bind.Unmarshaller;
 import javax.xml.bind.annotation.XmlAccessType;
 import javax.xml.bind.annotation.XmlAccessorType;
@@ -29,9 +34,7 @@ import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamReader;
 import javax.xml.stream.util.StreamReaderDelegate;
 
-import no.unit.contents.SruResponse.Datafield;
-
-public class SruResponse {
+public class AlmaDataReader {
 
     public static void main(String... args ) throws JAXBException, XMLStreamException, FactoryConfigurationError, IOException {
 
@@ -39,6 +42,7 @@ public class SruResponse {
         Map<String, String> isbnMap = new HashMap<>(); 
 
         JAXBContext context = JAXBContext.newInstance(Collection.class);
+        Set<String> ckbSet = new HashSet<>();;
         Files.list(Paths.get("E:\\innhold\\Nielsen\\data\\almaupdate\\")).filter(file -> file.getFileName().toString().endsWith(".xml")).forEach(file -> {
             System.out.println(file.getFileName().toString());
             InputStream is;
@@ -49,7 +53,7 @@ public class SruResponse {
                     XMLReaderWithoutNamespace xr = new XMLReaderWithoutNamespace(xsr);
                     Unmarshaller unmarshaller = context.createUnmarshaller();
 
-                    List<Map<String, String>> mappingList = parseXml(xr, unmarshaller);
+                    List<Map<String, String>> mappingList = parseXml(xr, unmarshaller, ckbSet);
 
                     System.out.println("mappingList: " + mappingList.size());
 
@@ -63,52 +67,240 @@ public class SruResponse {
         });
 
         System.out.println("isbnMap: " + isbnMap.size());
-
         List<Record> records = NielsenDatabaseUpdater.readRecords();
+
+        final Set<String> smallImageMap = new HashSet<>();
+        final Set<String> largeImageMap = new HashSet<>();
+        final Set<String> originalImageMap = new HashSet<>();
+        try {
+            Map<String, Set<String>> missingImages = NielsenDatabaseUpdater.findMissingImages(new ArrayList<>(records));
+            smallImageMap.addAll(missingImages.get("small").stream().map(imageName -> imageName.replace(".jpg", "")).collect(Collectors.toSet()));
+            largeImageMap.addAll(missingImages.get("large").stream().map(imageName -> imageName.replace(".jpg", "")).collect(Collectors.toSet()));
+            originalImageMap.addAll(missingImages.get("original").stream().map(imageName -> imageName.replace(".jpg", "")).collect(Collectors.toSet()));
+        } catch (SQLException | IOException e1) {
+            e1.printStackTrace();
+        }
+        
+        Set<Record> contentsRecords = records.stream().filter(record -> (record.getDescriptionBrief() != null && !record.getDescriptionBrief().isBlank())
+                    || (record.getDescriptionFull() != null && !record.getDescriptionFull().isBlank()) 
+                    || (record.getTableOfContents() != null && !record.getTableOfContents().isBlank())
+                    || (smallImageMap.contains(normalizeIsbn(record.getIsbn13())))
+                    || (largeImageMap.contains(normalizeIsbn(record.getIsbn13())))).collect(Collectors.toSet());
+        
+        System.out.printf("records with contents: %d", contentsRecords.size());
 
         Set<String> recordIsbnSet = records.stream().map(record -> record.getIsbn13()).collect(Collectors.toSet());
 
         System.out.println("recordIsbnSet: " + recordIsbnSet.size());
 
-        Set<String> foundMap = new HashSet<>();
+        Set<String> foundSet = new HashSet<>();
 
         isbnMap.keySet().forEach(isbn -> {
-            String convertedIsbn = isbn.replace("-", "");
-            if(convertedIsbn.length() >= 10) {
-                convertedIsbn = convertedIsbn.length() == 13 ? convertedIsbn : isbn10toIsbn13(convertedIsbn);
-                boolean found = recordIsbnSet.contains(convertedIsbn);
+            String convertedIsbn = normalizeIsbn(isbn);
+            boolean found = recordIsbnSet.contains(convertedIsbn);
+            
+            if(found) {
+                foundSet.add(normalizeIsbn(isbn));
+            }
+        });
 
-                if(found) {
-                    foundMap.add(isbn);
+        System.out.println("found: " + foundSet.size());
+        System.out.println("ckbSet: " + ckbSet.size());
+        System.out.println(System.currentTimeMillis() - start);
+
+        Set<Record> foundRecords = records.stream().filter(record -> foundSet.contains(normalizeIsbn(record.getIsbn13()))).collect(Collectors.toSet());
+
+        System.out.println(foundRecords.size());
+
+        AtomicInteger counter = new AtomicInteger();
+
+        Collection collection = new Collection();
+        collection.setRecordDataRecord(new ArrayList<>());
+
+        System.out.println("small images: " + smallImageMap.size());
+        System.out.println("large images: " + largeImageMap.size());
+
+        AtomicInteger total = new AtomicInteger();
+        
+        foundRecords.stream()
+        .forEach(record -> {
+
+            if((record.getDescriptionBrief() != null && !record.getDescriptionBrief().isBlank())
+                    || (record.getDescriptionFull() != null && !record.getDescriptionFull().isBlank()) 
+                    || (record.getTableOfContents() != null && !record.getTableOfContents().isBlank())
+                    || (smallImageMap.contains(record.getIsbn13()))
+                    || (largeImageMap.contains(record.getIsbn13()))) {
+
+                total.incrementAndGet();
+                
+                RecordDataRecord dataRecord = new RecordDataRecord();
+
+                List<Controlfield> controlfields = new ArrayList<>();
+                Controlfield controlfield = new Controlfield();
+                controlfield.setTag("001");
+                String isbn13 = record.getIsbn13();
+                controlfield.setValue(isbnMap.get(isbn13));
+                controlfields.add(controlfield);
+                dataRecord.setControlfield(controlfields);
+
+                ArrayList<Datafield> datafields = new ArrayList<>();
+                dataRecord.setDatafield(datafields);
+                if(record.getDescriptionBrief() != null && !record.getDescriptionBrief().isBlank()){
+                    String shortDescription = "Forlagets beskrivelse (kort)";
+                    String value = String.format("https://contents.bibsys.no/content/%s?type=DESCRIPTION_SHORT", record.getIsbn13());
+                    Datafield datafield = createSubfieldDescription(shortDescription, value, false);
+                    datafields.add(datafield);
+                }
+
+                if(record.getDescriptionFull() != null && !record.getDescriptionFull().isBlank()){
+                    String longDescription = "Forlagets beskrivelse (lang)";
+                    String value = String.format("https://contents.bibsys.no/content/%s?type=DESCRIPTION_LONG", record.getIsbn13());
+                    Datafield datafield = createSubfieldDescription(longDescription, value, false);
+                    datafields.add(datafield);
+                }
+
+                if(record.getTableOfContents() != null && !record.getTableOfContents().isBlank()){
+                    String tableOfContentsDescription = "Innholdsfortegnelse";
+                    String value = String.format("https://contents.bibsys.no/content/%s?type=CONTENTS", record.getIsbn13());
+                    Datafield datafield = createSubfieldDescription(tableOfContentsDescription, value, false);
+                    datafields.add(datafield);
+                }
+
+                String secondLinkPart = isbn13.substring(isbn13.length() - 2, isbn13.length() - 1);
+                String firstLinkPart = isbn13.substring(isbn13.length() - 1);
+
+                // images
+                if(smallImageMap.contains(isbn13)) {
+                    String longDescription = "Miniatyrbilde";
+                    String value = String.format("https://contents.bibsys.no/content/images/small/%s/%s/%s.jpg", firstLinkPart, secondLinkPart, isbn13);
+                    Datafield datafield = createSubfieldDescription(longDescription, value, true);
+                    datafields.add(datafield);
+                }
+
+                if(largeImageMap.contains(isbn13)) {
+                    String longDescription = "Omslagsbilde";
+                    String value = String.format("https://contents.bibsys.no/content/images/large/%s/%s/%s.jpg", firstLinkPart, secondLinkPart, isbn13);
+                    Datafield datafield = createSubfieldDescription(longDescription, value, true);
+                    datafields.add(datafield);
+                }
+
+
+                collection.getRecordDataRecord().add(dataRecord);
+
+                if(counter.incrementAndGet() == 50000) {
+
+                    try {
+                        writeToFile(collection);
+                    } catch (JAXBException e) {
+                        e.printStackTrace();
+                    }
+                    counter.set(0);
+                    collection.getRecordDataRecord().clear();
                 }
             }
         });
 
-
-        System.out.println("found: " + foundMap.size());
-        System.out.println(System.currentTimeMillis() - start);
+        if(collection.getRecordDataRecord().size() > 0 && collection.getRecordDataRecord().size() < 50000) {
+            try {
+                writeToFile(collection);
+            } catch (JAXBException e) {
+                e.printStackTrace();
+            }
+        }
+        
+        System.out.printf("total: " + total.get());
     }
 
-    private static List<Map<String, String>> parseXml(XMLReaderWithoutNamespace xr, Unmarshaller unmarshaller)
+    private static String normalizeIsbn(String isbn) {
+        String convertedIsbn = isbn.replace("-", "");
+        if(convertedIsbn.length() >= 10) {
+            convertedIsbn = convertedIsbn.length() == 13 ? convertedIsbn : isbn10toIsbn13(convertedIsbn);
+        }
+        return convertedIsbn;
+    }
+
+    private static Datafield createSubfieldDescription(String description, String value, boolean isImage) {
+        Datafield datafield = new Datafield();
+        datafield.setSubfield(new ArrayList<>());
+        datafield.setTag("956");
+        datafield.setInd1("4");
+        datafield.setInd2("2");
+
+        {
+            Subfield subfield3 = new Subfield();
+            subfield3.setCode("3");
+            subfield3.setValue(description);
+            datafield.getSubfield().add(subfield3);
+        }
+
+        {
+            Subfield subfielda = new Subfield();
+            subfielda.setCode("u");
+            subfielda.setValue(value);
+            datafield.getSubfield().add(subfielda);
+        }
+
+        if(isImage)
+        {
+            Subfield subfielda = new Subfield();
+            subfielda.setCode("q");
+            subfielda.setValue("image/jpeg");
+            datafield.getSubfield().add(subfielda);
+        }
+
+        return datafield;
+    }
+
+    private static void writeToFile(Collection collection) throws JAXBException {
+        String fileName = "e_content_import_" + System.currentTimeMillis() + ".xml";
+
+        System.out.println(fileName);
+
+        JAXBContext jaxbContext = JAXBContext.newInstance(Collection.class);
+        Marshaller marshaller = jaxbContext.createMarshaller();
+        marshaller.setProperty(Marshaller.JAXB_FORMATTED_OUTPUT, true);
+        marshaller.marshal(collection, new File(fileName));
+        //        marshaller.marshal(collection, System.out);
+    }
+
+    private static List<Map<String, String>> parseXml(XMLReaderWithoutNamespace xr, Unmarshaller unmarshaller, Set<String> ckbSet)
             throws JAXBException {
         Collection collection = unmarshaller.unmarshal(xr, Collection.class).getValue();
 
+        AtomicInteger ckbCounter = new AtomicInteger();
+
         if(collection != null && collection.getRecordDataRecord() != null) {
 
+            collection.recordDataRecord.forEach(record ->
+            { 
+                if(record.getDatafield() != null) {
+                    AtomicBoolean hasCkb = new AtomicBoolean(false);
+                    record.getDatafield().forEach(datafield -> {
 
+                        if(datafield.getTag() != null) {
+                            if(datafield.getTag().equals("035")) {
+                                datafield.getSubfield().forEach(subfield -> {
+                                    String code = subfield.getCode();
+                                    String value = subfield.getValue();
+                                    if(value.toLowerCase().startsWith("(ckb)")) {
+                                        hasCkb.getAndSet(true);
+                                    }
+                                });
+                            }
+                        }
+                    });
+                    if(hasCkb.get()) {
+                        ckbCounter.incrementAndGet();
+                        ckbSet.add(record.getControlfield().stream().filter(controlfield -> controlfield.getTag().equals("001")).findFirst().map(controlfield -> controlfield.getValue()).get());
+                    }
+                }
+            });
+            System.out.println(ckbSet.size());
             List<RecordDataRecord> filteredRecord = filterOn020(collection);
 
-            System.out.println(filteredRecord.size());
+            System.out.println("filteredRecords:" + filteredRecord.size());
+            System.out.println("ckb: " + ckbCounter.toString());
 
-
-            filteredRecord.forEach(record -> record.getDatafield().forEach(datafield -> {
-
-                if(datafield.getTag().equals("020")) {
-                    System.out.print(datafield.getTag());
-                    datafield.getSubfield().forEach(subfield -> System.out.print(" " + subfield.getCode() + " " + subfield.getValue()));
-                    System.out.println();
-                }
-            }));
 
             System.out.println("----------------------------");
 
@@ -129,7 +321,7 @@ public class SruResponse {
                 });
 
                 isbnSet.forEach(isbn -> {
-                    if(isbn != null) {
+                    if(isbn != null && ckbSet.contains(mmsId)) {
                         isbnMapping.put(isbn, mmsId);
                     }
                 });
