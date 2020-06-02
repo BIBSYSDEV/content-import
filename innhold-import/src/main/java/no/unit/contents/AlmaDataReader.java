@@ -8,7 +8,9 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.sql.SQLException;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -252,7 +254,9 @@ public class AlmaDataReader {
     }
 
     private static void writeToFile(Collection collection) throws JAXBException {
-        String fileName = "e_content_import_" + System.currentTimeMillis() + ".xml";
+        SimpleDateFormat dateFormat = new SimpleDateFormat("MM-dd");
+        String today = dateFormat.format(new Date());
+        String fileName = "e_content_import_" +  today + "_" + System.currentTimeMillis() + ".xml";
 
         System.out.println(fileName);
 
@@ -305,7 +309,6 @@ public class AlmaDataReader {
             System.out.println("----------------------------");
 
             List<Map<String, String>> mappingList = filteredRecord.stream().map(record -> {
-                Map<String, String> isbnMapping = new HashMap<>();
 
                 String mmsId = record.getControlfield().stream()
                         .filter(controlfield -> controlfield.getTag().contentEquals("001"))
@@ -320,9 +323,12 @@ public class AlmaDataReader {
                     datafield.getSubfield().forEach(subfield -> isbnSet.add(subfield.getCode().equals("a") ? subfield.getValue() : null));
                 });
 
+                Map<String, String> isbnMapping = new HashMap<>();
                 isbnSet.forEach(isbn -> {
-                    if(isbn != null && ckbSet.contains(mmsId)) {
-                        isbnMapping.put(isbn, mmsId);
+                    if(isbn != null) { 
+                        if(ckbSet.contains(mmsId)) {
+                            isbnMapping.put(normalizeIsbn(isbn), mmsId);
+                        }
                     }
                 });
 
