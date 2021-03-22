@@ -1,6 +1,14 @@
 package no.unit.contents;
 
-import java.sql.*;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -11,7 +19,7 @@ public class ContentsDatabaseExporter {
     private static final String PASSWORD = "";
     private static final String JDBC_DRIVER = "com.mysql.jdbc.Driver";
     private static final String CONNECTION_PARAMS = String.format("%s?user=%s&password=%s", DATABASE_URI, USER, PASSWORD);
-    private static final String SELECT_ISBN_STATEMENT = "SELECT `id` AS `book_id`, `value` AS `ìsbn` FROM `identificator`";
+    private static final String SELECT_ISBN_STATEMENT = "SELECT `id` AS `book_id`, `value` AS `isbn` FROM `identificator`";
     private static final String SELECT_BOOK_STATEMENT = "SELECT `id` AS `book_id`, `title`, `year` FROM `book` WHERE `id` = ?";
     private static final String SELECT_DESCRIPTION_STATEMENT = "SELECT `book_id`, `type`, `text`, `source` FROM `description` WHERE `book_id` = ?";
     private static final String SELECT_IMAGE_STATEMENT = "SELECT `book_id`, `path`, `type` FROM `image` WHERE `book_id` = ?";
@@ -37,16 +45,15 @@ public class ContentsDatabaseExporter {
 
 
 
-    public static void main(String[] args) throws SQLException, ClassNotFoundException {
+    public static void main(String[] args) throws SQLException, ClassNotFoundException, JsonProcessingException {
         ContentsDatabaseExporter exporter = new ContentsDatabaseExporter();
         List<ContentsDocument> contentsList = exporter.readAllIsbn();
         System.out.println("Number of isbn i database: " + contentsList.size());
     }
 
 
-    private List<ContentsDocument> readAllIsbn() throws ClassNotFoundException, SQLException {
+    private List<ContentsDocument> readAllIsbn() throws ClassNotFoundException, SQLException, JsonProcessingException {
         List<ContentsDocument> contentsList = new ArrayList<>();
-        List<String> bookIdList = new ArrayList<>();
         Class.forName(JDBC_DRIVER);
         try (Connection connection = DriverManager.getConnection(CONNECTION_PARAMS)) {
             PreparedStatement isbnStatement = connection.prepareStatement(SELECT_ISBN_STATEMENT);
@@ -55,8 +62,7 @@ public class ContentsDatabaseExporter {
             PreparedStatement imageStatement = connection.prepareStatement(SELECT_IMAGE_STATEMENT);
             ResultSet isbnResultSet = isbnStatement.executeQuery();
             while (isbnResultSet.next()) {
-                ContentsDocument contentsDocument = createContentsDocument(isbnResultSet.getString(COLUMN_ISBN));
-                contentsList.add(contentsDocument);
+                ContentsDocument contentsDocument = this.createContentsDocument(isbnResultSet.getString(COLUMN_ISBN));
                 String bookId = isbnResultSet.getString(COLUMN_BOOK_ID);
                 bookStatement.setString(1, bookId);
                 this.findBookMetadata(bookStatement, contentsDocument);
@@ -64,9 +70,19 @@ public class ContentsDatabaseExporter {
                 this.findDescriptionData(descriptionStatement, contentsDocument);
                 imageStatement.setString(1, bookId);
                 this.findImagePath(imageStatement, contentsDocument);
+                String json = this.toJsonString(contentsDocument);
+                System.out.println(json);
+                contentsList.add(contentsDocument);
             }
         }
         return contentsList;
+    }
+
+    private String toJsonString(ContentsDocument contentsDocument) throws JsonProcessingException {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.setSerializationInclusion(JsonInclude.Include.NON_NULL);
+        String json = mapper.writerWithDefaultPrettyPrinter().writeValueAsString(contentsDocument);
+        return json;
     }
 
     private void findImagePath(PreparedStatement statement, ContentsDocument contentsDocument) throws SQLException {
@@ -127,7 +143,7 @@ public class ContentsDatabaseExporter {
         ResultSet resultSet = statement.executeQuery();
         while (resultSet.next()) {
             contentsDocument.title = preventNullString(resultSet.getString(COLUMN_TITLE));
-            contentsDocument.year = preventNullString(resultSet.getString(COLUMN_YEAR));
+            contentsDocument.dateOfPublication = preventNullString(resultSet.getString(COLUMN_YEAR));
         }
     }
 
