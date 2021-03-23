@@ -4,23 +4,23 @@ import java.util.Objects;
 
 public class ContentsDocument {
 
-    protected String isbn;
-    protected String title;
-    protected String author;
-    protected String dateOfPublication;
-    protected String tableOfContents;
-    protected String descriptionShort;
-    protected String descriptionLong;
-    protected String review;
-    protected String summary;
-    protected String promotional;
-    protected String imageSmall;
-    protected String imageLarge;
-    protected String imageOriginal;
-    protected String audioFile;
-    protected String source;
-    protected String modified;
-    protected String created;
+    public String isbn;
+    public String title;
+    public String author;
+    public String dateOfPublication;
+    public String tableOfContents;
+    public String descriptionShort;
+    public String descriptionLong;
+    public String review;
+    public String summary;
+    public String promotional;
+    public String imageSmall;
+    public String imageLarge;
+    public String imageOriginal;
+    public String audioFile;
+    public String source;
+    public String modified;
+    public String created;
 
     public ContentsDocument(String isbn) {
         this.isbn = isbn;
