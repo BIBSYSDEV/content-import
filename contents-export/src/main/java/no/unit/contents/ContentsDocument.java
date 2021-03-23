@@ -8,9 +8,12 @@ public class ContentsDocument {
     protected String title;
     protected String author;
     protected String dateOfPublication;
+    protected String tableOfContents;
     protected String descriptionShort;
     protected String descriptionLong;
-    protected String tableOfContents;
+    protected String review;
+    protected String summary;
+    protected String promotional;
     protected String imageSmall;
     protected String imageLarge;
     protected String imageOriginal;
