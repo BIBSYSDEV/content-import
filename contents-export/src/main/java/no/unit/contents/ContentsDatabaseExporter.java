@@ -15,6 +15,7 @@ import java.sql.SQLException;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mysql.jdbc.StringUtils;
 
 import javax.ws.rs.HttpMethod;
 import javax.ws.rs.core.HttpHeaders;
@@ -35,7 +36,7 @@ public class ContentsDatabaseExporter {
             String.format("%s?user=%s&password=%s", DATABASE_URI, USER, PASSWORD);
 
     private static final String SELECT_ISBN_STATEMENT =
-            "SELECT `id` AS `book_id`, `value` AS `isbn` FROM `identificator`";
+            "SELECT `book_id`, `value` AS `isbn` FROM `identificator`";
     private static final String SELECT_BOOK_STATEMENT =
             "SELECT `id` AS `book_id`, `title`, `year` FROM `book` WHERE `id` = ?";
     private static final String SELECT_DESCRIPTION_STATEMENT =
@@ -66,10 +67,11 @@ public class ContentsDatabaseExporter {
 
     public static final String UNKNOWN_METADATA_TYPE = "Unknown metadata type: ";
     public static final String WITH_VALUE = "with value: ";
-    public static final String DUPLICATE_BOOK_ID = "Duplicate book_id ";
-    public static final String FOR_ISBN = " for isbn ";
+    public static final String DUPLICATE_ISBN_ID = "Duplicate isbn ";
+    public static final String FOR_BOOK_ID = " for book_id ";
     public static final String THAT_DID_NOT_WENT_WELL = "That did not went well: ";
     public static final String NUMBER_OF_ISBN_I_DATABASE = "Number of isbn i database: ";
+    public static final String INSUFFICIENT_DATA_ON_CONTENTS = "ContentsDocument does not have sufficient metadata and has thus been ignored: ";
 
     private final ObjectMapper mapper = new ObjectMapper();
 
@@ -87,7 +89,7 @@ public class ContentsDatabaseExporter {
 
     private List<ContentsDocument> readAllIsbn() throws ClassNotFoundException, SQLException, JsonProcessingException {
         List<ContentsDocument> contentsList = new ArrayList<>();
-        Set<String> finishedBookIDs = new HashSet<>();
+        Set<String> finishedISBNs = new HashSet<>();
         Class.forName(JDBC_DRIVER);
         try (Connection connection = DriverManager.getConnection(CONNECTION_PARAMS)) {
             PreparedStatement isbnStatement = connection.prepareStatement(SELECT_ISBN_STATEMENT);
@@ -99,8 +101,8 @@ public class ContentsDatabaseExporter {
             while (isbnResultSet.next()) {
                 String isbn = isbnResultSet.getString(COLUMN_ISBN);
                 String bookId = isbnResultSet.getString(COLUMN_BOOK_ID);
-                if (finishedBookIDs.contains(bookId)) {
-                    System.out.println(DUPLICATE_BOOK_ID + bookId + FOR_ISBN + isbn);
+                if (finishedISBNs.contains(isbn)) {
+                    System.out.println(DUPLICATE_ISBN_ID + isbn + FOR_BOOK_ID + bookId);
                 } else {
                     ContentsDocument contentsDocument = this.createContentsDocument(isbn);
                     bookStatement.setString(1, bookId);
@@ -109,26 +111,52 @@ public class ContentsDatabaseExporter {
                     this.findDescriptionData(descriptionStatement, contentsDocument);
                     imageStatement.setString(1, bookId);
                     this.findImagePath(imageStatement, contentsDocument);
-                    String payload = mapper.writeValueAsString(new ContentsPayload(contentsDocument));
-                    try {
-                        String response = this.sendContents(payload);
-                        System.out.println(response);
-                    } catch (Exception e) {
-                        System.out.println(THAT_DID_NOT_WENT_WELL + e.getMessage());
-                        e.printStackTrace();
+                    boolean isValidContentsDocument = this.checkValidity(contentsDocument);
+                    if (isValidContentsDocument) {
+                        String payload = mapper.writeValueAsString(new ContentsPayload(contentsDocument));
+                        try {
+                            System.out.println("SENDING..." + payload);
+                            String response = this.sendContents(payload);
+                            System.out.println("RESPONSE: " + response);
+                        } catch (Exception e) {
+                            System.out.println(THAT_DID_NOT_WENT_WELL + e.getMessage());
+                            e.printStackTrace();
+                        }
+                    } else {
+                        System.out.println(INSUFFICIENT_DATA_ON_CONTENTS + isbn);
                     }
                     contentsList.add(contentsDocument);
-                    finishedBookIDs.add(bookId);
+                    finishedISBNs.add(bookId);
                 }
             }
         }
         return contentsList;
     }
 
-    private String preparePayload(ContentsDocument contentsDocument) throws JsonProcessingException {
-        String payload = mapper.writeValueAsString(new ContentsPayload(contentsDocument));
-        System.out.println(payload);
-        return payload;
+    private boolean checkValidity(ContentsDocument contents) {
+        if (StringUtils.isEmptyOrWhitespaceOnly(contents.isbn)){
+            return false;
+        }
+        if (StringUtils.isEmptyOrWhitespaceOnly(contents.source)){
+            return false;
+        }
+        StringBuilder tempDesc = new StringBuilder();
+        tempDesc.append(contents.descriptionShort)
+                .append(contents.descriptionLong)
+                .append(contents.tableOfContents)
+                .append(contents.author)
+                .append(contents.summary)
+                .append(contents.review)
+                .append(contents.promotional);
+        StringBuilder tempImg = new StringBuilder();
+        tempDesc.append(contents.imageSmall)
+                .append(contents.imageLarge)
+                .append(contents.imageOriginal);
+        if (StringUtils.isEmptyOrWhitespaceOnly(tempDesc.toString()) &&
+                StringUtils.isEmptyOrWhitespaceOnly(tempImg.toString())){
+            return false;
+        }
+        return true;
     }
 
     private String sendContents(String payload) throws IOException {
@@ -178,6 +206,9 @@ public class ContentsDatabaseExporter {
                     }
                     break;
             }
+            if (StringUtils.isEmptyOrWhitespaceOnly(contentsDocument.source)) {
+                contentsDocument.source = preventNullString(resultSet.getString(COLUMN_SOURCE));
+            }
         }
     }
 
@@ -219,7 +250,7 @@ public class ContentsDatabaseExporter {
                     break;
             }
             // do not add the long description field if it has the same text as the short description field
-            if (!descLong.equals(contentsDocument.descriptionShort)) {
+            if (!descLong.equals(contentsDocument.descriptionShort) && !StringUtils.isEmptyOrWhitespaceOnly(descLong)) {
                 contentsDocument.descriptionLong = descLong;
             }
             contentsDocument.source = preventNullString(resultSet.getString(COLUMN_SOURCE));
