@@ -6,11 +6,7 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
+import java.sql.*;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -20,6 +16,7 @@ import com.mysql.jdbc.StringUtils;
 import javax.ws.rs.HttpMethod;
 import javax.ws.rs.core.HttpHeaders;
 import javax.ws.rs.core.MediaType;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -42,7 +39,7 @@ public class ContentsDatabaseExporter {
     private static final String SELECT_DESCRIPTION_STATEMENT =
             "SELECT `book_id`, `type`, `text`, `source` FROM `description` WHERE `book_id` = ?";
     private static final String SELECT_IMAGE_STATEMENT =
-            "SELECT `book_id`, `path`, `type` FROM `image` WHERE `book_id` = ?";
+            "SELECT `book_id`, `path`, `type`, `source` FROM `image` WHERE `book_id` = ?";
 
     public static final String COLUMN_ISBN = "isbn";
     public static final String COLUMN_BOOK_ID = "book_id";
@@ -119,8 +116,10 @@ public class ContentsDatabaseExporter {
                             String response = this.sendContents(payload);
                             System.out.println("RESPONSE: " + response);
                         } catch (Exception e) {
+                            System.out.println(Instant.now());
                             System.out.println(THAT_DID_NOT_WENT_WELL + e.getMessage());
                             e.printStackTrace();
+                            System.exit(1);
                         }
                     } else {
                         System.out.println(INSUFFICIENT_DATA_ON_CONTENTS + isbn);
