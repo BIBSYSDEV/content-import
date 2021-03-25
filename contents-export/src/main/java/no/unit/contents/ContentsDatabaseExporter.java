@@ -15,6 +15,10 @@ import java.sql.SQLException;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
+import javax.ws.rs.HttpMethod;
+import javax.ws.rs.core.HttpHeaders;
+import javax.ws.rs.core.MediaType;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -22,12 +26,14 @@ import java.util.Set;
 
 public class ContentsDatabaseExporter {
 
+    private static final String CONTENTS_API_URL = "https://api.sandbox.bibs.aws.unit.no/contents";
     private static final String DATABASE_URI = "jdbc:mysql://mysql.bibsys.no/contents";
     private static final String USER = "";
     private static final String PASSWORD = "";
     private static final String JDBC_DRIVER = "com.mysql.jdbc.Driver";
     private static final String CONNECTION_PARAMS =
             String.format("%s?user=%s&password=%s", DATABASE_URI, USER, PASSWORD);
+
     private static final String SELECT_ISBN_STATEMENT =
             "SELECT `id` AS `book_id`, `value` AS `isbn` FROM `identificator`";
     private static final String SELECT_BOOK_STATEMENT =
@@ -36,6 +42,7 @@ public class ContentsDatabaseExporter {
             "SELECT `book_id`, `type`, `text`, `source` FROM `description` WHERE `book_id` = ?";
     private static final String SELECT_IMAGE_STATEMENT =
             "SELECT `book_id`, `path`, `type` FROM `image` WHERE `book_id` = ?";
+
     public static final String COLUMN_ISBN = "isbn";
     public static final String COLUMN_BOOK_ID = "book_id";
     public static final String COLUMN_TITLE = "title";
@@ -44,6 +51,7 @@ public class ContentsDatabaseExporter {
     public static final String COLUMN_TEXT = "text";
     public static final String COLUMN_SOURCE = "source";
     public static final String COLUMN_PATH = "path";
+
     public static final String AUTHOR_TYPE = "AUTHOR";
     public static final String CONTENTS_TYPE = "CONTENTS";
     public static final String DESCRIPTION_SHORT_TYPE = "DESCRIPTION_SHORT";
@@ -55,9 +63,14 @@ public class ContentsDatabaseExporter {
     public static final String LARGE_IMAGE_TYPE = "LARGE";
     public static final String ORIGINAL_IMAGE_TYPE = "ORIGINAL";
     public static final String EMPTY_STRING = "";
+
     public static final String UNKNOWN_METADATA_TYPE = "Unknown metadata type: ";
     public static final String WITH_VALUE = "with value: ";
     public static final String DUPLICATE_BOOK_ID = "Duplicate book_id ";
+    public static final String FOR_ISBN = " for isbn ";
+    public static final String THAT_DID_NOT_WENT_WELL = "That did not went well: ";
+    public static final String NUMBER_OF_ISBN_I_DATABASE = "Number of isbn i database: ";
+
     private final ObjectMapper mapper = new ObjectMapper();
 
     public ContentsDatabaseExporter() {
@@ -68,7 +81,7 @@ public class ContentsDatabaseExporter {
     public static void main(String[] args) throws SQLException, ClassNotFoundException, JsonProcessingException {
         ContentsDatabaseExporter exporter = new ContentsDatabaseExporter();
         List<ContentsDocument> contentsList = exporter.readAllIsbn();
-        System.out.println("Number of isbn i database: " + contentsList.size());
+        System.out.println(NUMBER_OF_ISBN_I_DATABASE + contentsList.size());
     }
 
 
@@ -82,11 +95,12 @@ public class ContentsDatabaseExporter {
             PreparedStatement descriptionStatement = connection.prepareStatement(SELECT_DESCRIPTION_STATEMENT);
             PreparedStatement imageStatement = connection.prepareStatement(SELECT_IMAGE_STATEMENT);
             ResultSet isbnResultSet = isbnStatement.executeQuery();
+            System.out.println(NUMBER_OF_ISBN_I_DATABASE + isbnResultSet.getFetchSize());
             while (isbnResultSet.next()) {
                 String isbn = isbnResultSet.getString(COLUMN_ISBN);
                 String bookId = isbnResultSet.getString(COLUMN_BOOK_ID);
                 if (finishedBookIDs.contains(bookId)) {
-                    System.out.println(DUPLICATE_BOOK_ID + bookId + " for isbn " + isbn);
+                    System.out.println(DUPLICATE_BOOK_ID + bookId + FOR_ISBN + isbn);
                 } else {
                     ContentsDocument contentsDocument = this.createContentsDocument(isbn);
                     bookStatement.setString(1, bookId);
@@ -95,12 +109,12 @@ public class ContentsDatabaseExporter {
                     this.findDescriptionData(descriptionStatement, contentsDocument);
                     imageStatement.setString(1, bookId);
                     this.findImagePath(imageStatement, contentsDocument);
-                    String payload = mapper.writeValueAsString(contentsDocument);
-                    System.out.println(payload);
+                    String payload = mapper.writeValueAsString(new ContentsPayload(contentsDocument));
                     try {
-                        this.postToContentsApi(payload);
-                    } catch (IOException e) {
-                        System.out.println("That did not went well: " + e.getMessage());
+                        String response = this.sendContents(payload);
+                        System.out.println(response);
+                    } catch (Exception e) {
+                        System.out.println(THAT_DID_NOT_WENT_WELL + e.getMessage());
                         e.printStackTrace();
                     }
                     contentsList.add(contentsDocument);
@@ -111,27 +125,32 @@ public class ContentsDatabaseExporter {
         return contentsList;
     }
 
-    private void postToContentsApi(String contentsJson) throws IOException {
-        //Todo: working but ugly
-        String body = "{ \"contents\": \"" + contentsJson.replace("\"", "\\\"") + "\"}";
-        URL url = new URL("https://api.sandbox.bibs.aws.unit.no/contents");
+    private String preparePayload(ContentsDocument contentsDocument) throws JsonProcessingException {
+        String payload = mapper.writeValueAsString(new ContentsPayload(contentsDocument));
+        System.out.println(payload);
+        return payload;
+    }
+
+    private String sendContents(String payload) throws IOException {
+        URL url = new URL(CONTENTS_API_URL);
         HttpURLConnection con = (HttpURLConnection)url.openConnection();
-        con.setRequestMethod("PUT");
-        con.setRequestProperty("Content-Type", "application/json; utf-8");
-        con.setRequestProperty("Accept", "application/json");
+        con.setRequestMethod(HttpMethod.PUT);
+        con.setRequestProperty(HttpHeaders.CONTENT_TYPE,
+                MediaType.APPLICATION_JSON_TYPE.withCharset(StandardCharsets.UTF_8.name()).toString());
+        con.setRequestProperty(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_TYPE.toString());
         con.setDoOutput(true);
         try(OutputStream os = con.getOutputStream()) {
-            byte[] input = body.getBytes(StandardCharsets.UTF_8);
+            byte[] input = payload.getBytes(StandardCharsets.UTF_8);
             os.write(input, 0, input.length);
         }
         try(BufferedReader br = new BufferedReader(
                 new InputStreamReader(con.getInputStream(), StandardCharsets.UTF_8))) {
             StringBuilder response = new StringBuilder();
-            String responseLine = null;
+            String responseLine;
             while ((responseLine = br.readLine()) != null) {
                 response.append(responseLine.trim());
             }
-            System.out.println(response.toString());
+            return response.toString();
         }
 
     }
@@ -221,6 +240,15 @@ public class ContentsDatabaseExporter {
 
     private ContentsDocument createContentsDocument(String isbn) {
         return new ContentsDocument(isbn);
+    }
+
+    private class ContentsPayload {
+
+        public ContentsDocument contents;
+
+        public ContentsPayload(ContentsDocument contents) {
+            this.contents = contents;
+        }
     }
 
 }
