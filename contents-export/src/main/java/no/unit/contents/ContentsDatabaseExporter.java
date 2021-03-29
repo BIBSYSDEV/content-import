@@ -25,8 +25,8 @@ public class ContentsDatabaseExporter {
     private static final String FILE_NAME = "failedIsbn.csv";
     private static final String CONTENTS_API_URL = "https://api.sandbox.bibs.aws.unit.no/contents";
     private static final String DATABASE_URI = "jdbc:mysql://mysql.bibsys.no/contents";
-    private static final String USER = "contents";
-    private static final String PASSWORD = "Pz48t39qTmBdUsXZ";
+    private static final String USER = "NO_DEFAULT_USER";
+    private static final String PASSWORD = "NO_DEFAULT_PASSWORD";
     private static final String JDBC_DRIVER = "com.mysql.jdbc.Driver";
     private static final String CONNECTION_PARAMS =
             String.format("%s?user=%s&password=%s", DATABASE_URI, USER, PASSWORD);
