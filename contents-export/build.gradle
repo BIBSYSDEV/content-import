@@ -1,0 +1,24 @@
+plugins {
+    id 'java'
+}
+
+group 'no.unit.contents'
+version '1.0-SNAPSHOT'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation group: 'commons-io', name: 'commons-io', version: '2.8.0'
+    implementation group: 'org.glassfish.jersey.core', name: 'jersey-client', version: '2.6'
+    implementation group: 'javax.ws.rs', name: 'javax.ws.rs-api', version: '2.1.1'
+    implementation group: 'com.fasterxml.jackson.core', name: 'jackson-databind', version: '2.9.7'
+    implementation group: 'mysql', name: 'mysql-connector-java', version: '5.1.45'
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.6.0'
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine'
+}
+
+test {
+    useJUnitPlatform()
+}
