@@ -86,7 +86,7 @@ public class ContentsDatabaseExporter {
         System.out.println("Started " + Instant.now());
         ContentsDatabaseExporter exporter = new ContentsDatabaseExporter();
         if (!StringUtils.isNullOrEmpty(args[0])) {
-            List<ValuePair> isbnBookIdList = readFromFile(args[0]);
+            List<ValuePair> isbnBookIdList = exporter.readFromFile(args[0]);
             exporter.export(isbnBookIdList);
         } else {
             exporter.export();
@@ -94,7 +94,7 @@ public class ContentsDatabaseExporter {
         System.out.println("Finished " + Instant.now());
     }
 
-    private static List<ValuePair> readFromFile(String filename) throws IOException {
+    private List<ValuePair> readFromFile(String filename) throws IOException {
         File file = new File(filename);
         List<ValuePair> valuePairList = new ArrayList<>();
         List<String> lines = FileUtils.readLines(file, StandardCharsets.UTF_8);
@@ -326,25 +326,6 @@ public class ContentsDatabaseExporter {
 
     private ContentsDocument createContentsDocument(String isbn) {
         return new ContentsDocument(isbn);
-    }
-
-    private static class ValuePair {
-        public String isbn;
-        public String bookId;
-
-        public ValuePair(String isbn, String bookId) {
-            this.isbn = isbn;
-            this.bookId = bookId;
-        }
-    }
-
-    private class ContentsPayload {
-
-        public ContentsDocument contents;
-
-        public ContentsPayload(ContentsDocument contents) {
-            this.contents = contents;
-        }
     }
 
 }
