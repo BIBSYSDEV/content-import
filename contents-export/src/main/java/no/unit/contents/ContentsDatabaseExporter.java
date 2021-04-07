@@ -85,7 +85,7 @@ public class ContentsDatabaseExporter {
     public static void main(String[] args) throws SQLException, ClassNotFoundException, IOException {
         System.out.println("Started " + Instant.now());
         ContentsDatabaseExporter exporter = new ContentsDatabaseExporter();
-        if (!StringUtils.isNullOrEmpty(args[0])) {
+        if (args.length > 0) {
             List<ValuePair> isbnBookIdList = exporter.readFromFile(args[0]);
             exporter.export(isbnBookIdList);
         } else {
