@@ -1,5 +1,7 @@
 package no.unit.contents;
 
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Objects;
 
 public class ContentsDocument {
@@ -17,13 +19,13 @@ public class ContentsDocument {
     public String imageSmall;
     public String imageLarge;
     public String imageOriginal;
-    public String audioFile;
     public String source;
     public String modified;
     public String created;
 
     public ContentsDocument(String isbn) {
         this.isbn = isbn;
+        this.created = Instant.now().minus(2, ChronoUnit.DAYS).toString();
     }
 
     @Override

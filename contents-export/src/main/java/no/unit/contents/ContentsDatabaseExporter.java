@@ -1,9 +1,13 @@
 package no.unit.contents;
 
-import java.io.*;
-import java.net.*;
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
-import java.sql.*;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -14,6 +18,11 @@ import org.apache.commons.io.FileUtils;
 import javax.ws.rs.HttpMethod;
 import javax.ws.rs.core.HttpHeaders;
 import javax.ws.rs.core.MediaType;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -217,7 +226,7 @@ public class ContentsDatabaseExporter {
     private String sendContents(String payload) throws IOException {
         URL url = new URL(CONTENTS_API_URL);
         HttpURLConnection con = (HttpURLConnection) url.openConnection();
-        con.setRequestMethod(HttpMethod.PUT);
+        con.setRequestMethod(HttpMethod.POST);
         con.setRequestProperty(HttpHeaders.CONTENT_TYPE,
                 MediaType.APPLICATION_JSON_TYPE.withCharset(StandardCharsets.UTF_8.name()).toString());
         con.setRequestProperty(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_TYPE.toString());
