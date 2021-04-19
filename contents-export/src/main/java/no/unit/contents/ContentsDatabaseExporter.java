@@ -41,8 +41,8 @@ public class ContentsDatabaseExporter {
     private static final String CONTENTS_API_URL = "https://api.sandbox.bibs.aws.unit.no/contents";
     private static final String DATABASE_URI = "jdbc:mysql://mysql.bibsys.no/contents";
     private static final String JDBC_DRIVER = "com.mysql.jdbc.Driver";
-    private static final String USER = "contents";
-    private static final String PASSWORD = "Pz48t39qTmBdUsXZ";
+    private static final String USER = "NO_DEFAULT_USER";
+    private static final String PASSWORD = "NO_DEFAULT_PASSWORD";
     private static final String CONNECTION_PARAMS =
             String.format("%s?user=%s&password=%s", DATABASE_URI, USER, PASSWORD);
 
@@ -259,7 +259,9 @@ public class ContentsDatabaseExporter {
         ResultSet resultSet = statement.executeQuery();
         while (resultSet.next()) {
             String type = resultSet.getString(COLUMN_TYPE);
-            String path = IMAGES_BASE_URL + preventNullString(resultSet.getString(COLUMN_PATH));
+            String path = preventNullString(resultSet.getString(COLUMN_PATH));
+            path = this.dealWithOldBIBSYSpath(path);
+            path = IMAGES_BASE_URL + path;
             if (this.isImagePresent(path)) {
                 switch (type) {
                     case SMALL_IMAGE_TYPE:
@@ -293,7 +295,6 @@ public class ContentsDatabaseExporter {
 
     private boolean isImagePresent(String urlpath) {
         boolean imageIsPresent= false;
-        urlpath = this.dealWithOldBIBSYSpath(urlpath);
         try {
             URL url = new URL(urlpath);
             HttpURLConnection.setFollowRedirects(true);
