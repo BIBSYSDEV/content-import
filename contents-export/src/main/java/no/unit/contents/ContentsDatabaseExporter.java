@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
+import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 
@@ -36,8 +37,8 @@ public class ContentsDatabaseExporter {
     private static final String FILE_NAME = "failedIsbn.csv";
     private static final String CONTENTS_API_URL = "https://api.sandbox.bibs.aws.unit.no/contents";
     private static final String DATABASE_URI = "jdbc:mysql://mysql.bibsys.no/contents";
-    private static final String USER = "NO_DEFAULT_USER";
-    private static final String PASSWORD = "NO_DEFAULT_PASSWORD";
+    private static final String USER = "contents";
+    private static final String PASSWORD = "Pz48t39qTmBdUsXZ";
     private static final String JDBC_DRIVER = "com.mysql.jdbc.Driver";
     private static final String CONNECTION_PARAMS =
             String.format("%s?user=%s&password=%s", DATABASE_URI, USER, PASSWORD);
@@ -84,6 +85,7 @@ public class ContentsDatabaseExporter {
     public static final String SENDING = "SENDING...";
     public static final String RESPONSE = "RESPONSE: ";
     public static final String FAILED_TO_APPEND_TO_FILE = "Failed to append to file ";
+    public static final String IMAGES_BASE_URL = "https://contents.bibsys.no/content/images/";
 
     private final ObjectMapper mapper = new ObjectMapper();
     private final File file = new File(FILE_NAME);
@@ -174,8 +176,8 @@ public class ContentsDatabaseExporter {
                 String payload = mapper.writeValueAsString(new ContentsPayload(contentsDocument));
                 try {
                     System.out.println(SENDING + payload);
-                    String response = this.sendContents(payload);
-                    System.out.println(RESPONSE + response);
+//                    String response = this.sendContents(payload);
+//                    System.out.println(RESPONSE + response);
                     contentsList.add(contentsDocument);
                 } catch (Exception e) {
                     System.out.println(Instant.now());
@@ -253,29 +255,46 @@ public class ContentsDatabaseExporter {
         ResultSet resultSet = statement.executeQuery();
         while (resultSet.next()) {
             String type = resultSet.getString(COLUMN_TYPE);
-            String path = resultSet.getString(COLUMN_PATH);
-            switch (type) {
-                case SMALL_IMAGE_TYPE:
-                    contentsDocument.imageSmall = preventNullString(path);
-                    break;
-                case LARGE_IMAGE_TYPE:
-                    contentsDocument.imageLarge = preventNullString(path);
-                    break;
-                case ORIGINAL_IMAGE_TYPE:
-                    contentsDocument.imageOriginal = preventNullString(path);
-                    break;
-                default:
-                    if (!preventNullString(path).isEmpty()) {
-                        System.out.println(UNKNOWN_METADATA_TYPE + type);
-                        System.out.println(WITH_VALUE);
-                        System.out.println(path);
-                    }
-                    break;
-            }
-            if (StringUtils.isEmptyOrWhitespaceOnly(contentsDocument.source)) {
-                contentsDocument.source = preventNullString(resultSet.getString(COLUMN_SOURCE));
+            String path = IMAGES_BASE_URL + preventNullString(resultSet.getString(COLUMN_PATH));
+            if (this.isImagePresent(path)) {
+                switch (type) {
+                    case SMALL_IMAGE_TYPE:
+                        contentsDocument.imageSmall = path;
+                        break;
+                    case LARGE_IMAGE_TYPE:
+                        contentsDocument.imageLarge = path;
+                        break;
+                    case ORIGINAL_IMAGE_TYPE:
+                        contentsDocument.imageOriginal = path;
+                        break;
+                    default:
+                        if (!preventNullString(path).isEmpty()) {
+                            System.out.println(UNKNOWN_METADATA_TYPE + type);
+                            System.out.println(WITH_VALUE);
+                            System.out.println(path);
+                        }
+                        break;
+                }
             }
         }
+        if (StringUtils.isEmptyOrWhitespaceOnly(contentsDocument.source)) {
+            contentsDocument.source = preventNullString(resultSet.getString(COLUMN_SOURCE));
+        }
+    }
+
+    private boolean isImagePresent(String urlpath) {
+        boolean imageIsPresent= false;
+        try {
+            URL url = new URL(urlpath);
+            HttpURLConnection.setFollowRedirects(true);
+            HttpURLConnection huc = (HttpURLConnection) url.openConnection();
+            huc.setRequestMethod(HttpMethod.HEAD);
+            int responseCode = huc.getResponseCode();
+            imageIsPresent = responseCode < 300;
+        } catch (IOException e) {
+            System.out.println("Image was not found: " + urlpath);
+        }
+        return imageIsPresent;
     }
 
     private void findDescriptionData(PreparedStatement statement, ContentsDocument contentsDocument)
