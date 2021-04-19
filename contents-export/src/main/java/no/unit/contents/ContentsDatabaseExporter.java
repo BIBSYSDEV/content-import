@@ -164,7 +164,7 @@ public class ContentsDatabaseExporter {
                                       PreparedStatement bookStatement, PreparedStatement descriptionStatement,
                                       PreparedStatement imageStatement, String isbn, String bookId)
             throws SQLException, JsonProcessingException {
-
+        System.out.println(String.format("Done with %d isbns", finishedISBNs.size()));
         if (finishedISBNs.contains(isbn)) {
             System.out.println(DUPLICATE_ISBN_ID + isbn + FOR_BOOK_ID + bookId);
         } else {
@@ -180,8 +180,8 @@ public class ContentsDatabaseExporter {
                 String payload = mapper.writeValueAsString(new ContentsPayload(contentsDocument));
                 try {
                     System.out.println(SENDING + payload);
-                    //String response = this.sendContents(payload);
-                    //System.out.println(RESPONSE + response);
+                    String response = this.sendContents(payload);
+                    System.out.println(RESPONSE + response);
                     contentsList.add(contentsDocument);
                 } catch (Exception e) {
                     System.out.println(Instant.now());
@@ -192,7 +192,7 @@ public class ContentsDatabaseExporter {
             } else {
                 System.out.println(INSUFFICIENT_DATA_ON_CONTENTS + isbn);
             }
-            finishedISBNs.add(bookId);
+            finishedISBNs.add(isbn);
         }
     }
 
