@@ -14,6 +14,8 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mysql.jdbc.StringUtils;
 import org.apache.commons.io.FileUtils;
+import org.jsoup.Jsoup;
+import org.jsoup.safety.Whitelist;
 
 import javax.ws.rs.HttpMethod;
 import javax.ws.rs.core.HttpHeaders;
@@ -282,31 +284,33 @@ public class ContentsDatabaseExporter {
         while (resultSet.next()) {
             String type = resultSet.getString(COLUMN_TYPE);
             String text = resultSet.getString(COLUMN_TEXT);
+            text = preventNullString(text);
+            text = Jsoup.clean(text, Whitelist.relaxed());
             String descLong = EMPTY_STRING;
             switch (type) {
                 case AUTHOR_TYPE:
-                    contentsDocument.author = preventNullString(text);
+                    contentsDocument.author = text;
                     break;
                 case CONTENTS_TYPE:
-                    contentsDocument.tableOfContents = preventNullString(text);
+                    contentsDocument.tableOfContents = text;
                     break;
                 case SUMMARY_TYPE:
-                    contentsDocument.summary = preventNullString(text);
+                    contentsDocument.summary = text;
                     break;
                 case REVIEW_TYPE:
-                    contentsDocument.review = preventNullString(text);
+                    contentsDocument.review = text;
                     break;
                 case PROMOTIONAL_TYPE:
-                    contentsDocument.promotional = preventNullString(text);
+                    contentsDocument.promotional = text;
                     break;
                 case DESCRIPTION_SHORT_TYPE:
-                    contentsDocument.descriptionShort = preventNullString(text);
+                    contentsDocument.descriptionShort = text;
                     break;
                 case DESCRIPTION_LONG_TYPE:
-                    descLong = preventNullString(text);
+                    descLong = text;
                     break;
                 default:
-                    if (!preventNullString(text).isEmpty()) {
+                    if (!text.isEmpty()) {
                         System.out.println(UNKNOWN_METADATA_TYPE + type);
                         System.out.println(WITH_VALUE);
                         System.out.println(text);
