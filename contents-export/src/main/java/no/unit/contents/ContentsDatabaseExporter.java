@@ -14,6 +14,8 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mysql.jdbc.StringUtils;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.apache.commons.io.FileUtils;
 import org.jsoup.Jsoup;
 import org.jsoup.safety.Whitelist;
@@ -39,8 +41,8 @@ public class ContentsDatabaseExporter {
     private static final String CONTENTS_API_URL = "https://api.sandbox.bibs.aws.unit.no/contents";
     private static final String DATABASE_URI = "jdbc:mysql://mysql.bibsys.no/contents";
     private static final String JDBC_DRIVER = "com.mysql.jdbc.Driver";
-    private static final String USER = "NO_DEFAULT_USER";
-    private static final String PASSWORD = "NO_DEFAULT_PASSWORD";
+    private static final String USER = "contents";
+    private static final String PASSWORD = "Pz48t39qTmBdUsXZ";
     private static final String CONNECTION_PARAMS =
             String.format("%s?user=%s&password=%s", DATABASE_URI, USER, PASSWORD);
 
@@ -86,6 +88,8 @@ public class ContentsDatabaseExporter {
     public static final String SENDING = "SENDING...";
     public static final String RESPONSE = "RESPONSE: ";
     public static final String FAILED_TO_APPEND_TO_FILE = "Failed to append to file ";
+    public static final String SLASH = "/";
+    public static final String ESCAPED_DOT = "\\.";
 
     private final ObjectMapper mapper = new ObjectMapper();
     private final File file = new File(FILE_NAME);
@@ -176,8 +180,8 @@ public class ContentsDatabaseExporter {
                 String payload = mapper.writeValueAsString(new ContentsPayload(contentsDocument));
                 try {
                     System.out.println(SENDING + payload);
-                    String response = this.sendContents(payload);
-                    System.out.println(RESPONSE + response);
+                    //String response = this.sendContents(payload);
+                    //System.out.println(RESPONSE + response);
                     contentsList.add(contentsDocument);
                 } catch (Exception e) {
                     System.out.println(Instant.now());
@@ -278,12 +282,18 @@ public class ContentsDatabaseExporter {
             }
         }
         if (StringUtils.isEmptyOrWhitespaceOnly(contentsDocument.source)) {
-            contentsDocument.source = preventNullString(resultSet.getString(COLUMN_SOURCE));
+            try {
+                final String source = resultSet.getString(COLUMN_SOURCE);
+                contentsDocument.source = preventNullString(source);
+            } catch (SQLException ex) {
+                contentsDocument.source = "BIBSYS";
+            }
         }
     }
 
     private boolean isImagePresent(String urlpath) {
         boolean imageIsPresent= false;
+        urlpath = this.dealWithOldBIBSYSpath(urlpath);
         try {
             URL url = new URL(urlpath);
             HttpURLConnection.setFollowRedirects(true);
@@ -295,6 +305,31 @@ public class ContentsDatabaseExporter {
             System.out.println("Image was not found: " + urlpath);
         }
         return imageIsPresent;
+    }
+
+    public String dealWithOldBIBSYSpath(String urlpath) {
+        //short BIBSYS path
+        Pattern pattern = Pattern.compile("^\\w*\\/\\w*\\.\\w*$");
+        final Matcher matcher = pattern.matcher(urlpath);
+        if (matcher.matches()) {
+            final String[] split = urlpath.split(ESCAPED_DOT);
+            final char[] chars = split[0].toCharArray();
+            if (chars.length > 2) {
+                final char lastDigit = chars[chars.length - 1];
+                final char secondLastDigit = chars[chars.length - 2];
+                final String[] urlSplit = urlpath.split(SLASH);
+                StringBuilder str = new StringBuilder();
+                str.append(urlSplit[0])
+                    .append(SLASH)
+                    .append(lastDigit)
+                    .append(SLASH)
+                    .append(secondLastDigit)
+                    .append(SLASH)
+                    .append(urlSplit[1]);
+                urlpath = str.toString();
+            }
+        }
+        return urlpath;
     }
 
     private void findDescriptionData(PreparedStatement statement, ContentsDocument contentsDocument)
