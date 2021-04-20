@@ -6,7 +6,6 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
-import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 
@@ -36,7 +35,8 @@ import java.util.Set;
 
 public class ContentsDatabaseExporter {
 
-    private static final String FILE_NAME = "failedIsbn.csv";
+    private static final String FAILED_ISBN_CSV = "failedIsbn.csv";
+    private static final String FINISHED_ISBN_TXT = "fìnishedIsbn.txt";
     private static final String IMAGES_BASE_URL = "https://contents.bibsys.no/content/images/";
     private static final String CONTENTS_API_URL = "https://api.sandbox.bibs.aws.unit.no/contents";
     private static final String DATABASE_URI = "jdbc:mysql://mysql.bibsys.no/contents";
@@ -47,7 +47,7 @@ public class ContentsDatabaseExporter {
             String.format("%s?user=%s&password=%s", DATABASE_URI, USER, PASSWORD);
 
     private static final String SELECT_ISBN_STATEMENT =
-            "SELECT `book_id`, `value` AS `isbn` FROM `identificator`";
+            "SELECT `book_id`, `value` AS `isbn` FROM `identificator` ORDER BY `value`";
     private static final String SELECT_BOOK_STATEMENT =
             "SELECT `id` AS `book_id`, `title`, `year` FROM `book` WHERE `id` = ?";
     private static final String SELECT_DESCRIPTION_STATEMENT =
@@ -92,7 +92,9 @@ public class ContentsDatabaseExporter {
     public static final String ESCAPED_DOT = "\\.";
 
     private final ObjectMapper mapper = new ObjectMapper();
-    private final File file = new File(FILE_NAME);
+    private static final File failed_file = new File(FAILED_ISBN_CSV);
+    private static final File finished_file = new File(FINISHED_ISBN_TXT);
+    private static Set<String> finishedISBNs = new HashSet<>();
 
     public ContentsDatabaseExporter() {
         mapper.setSerializationInclusion(JsonInclude.Include.NON_NULL).writerWithDefaultPrettyPrinter();
@@ -102,8 +104,15 @@ public class ContentsDatabaseExporter {
     public static void main(String[] args) throws SQLException, ClassNotFoundException, IOException {
         System.out.println("Started " + Instant.now());
         ContentsDatabaseExporter exporter = new ContentsDatabaseExporter();
+        if (!failed_file.exists()) {
+            failed_file.createNewFile();
+        }
+        if (!finished_file.exists()) {
+            finished_file.createNewFile();
+        }
+        finishedISBNs.addAll(FileUtils.readLines(finished_file, StandardCharsets.UTF_8));
         if (args.length > 0) {
-            List<ValuePair> isbnBookIdList = exporter.readFromFile(args[0]);
+            List<ValuePair> isbnBookIdList = exporter.readFromFailedFile(args[0]);
             exporter.export(isbnBookIdList);
         } else {
             exporter.export();
@@ -111,7 +120,7 @@ public class ContentsDatabaseExporter {
         System.out.println("Finished " + Instant.now());
     }
 
-    private List<ValuePair> readFromFile(String filename) throws IOException {
+    private List<ValuePair> readFromFailedFile(String filename) throws IOException {
         File file = new File(filename);
         List<ValuePair> valuePairList = new ArrayList<>();
         List<String> lines = FileUtils.readLines(file, StandardCharsets.UTF_8);
@@ -122,18 +131,16 @@ public class ContentsDatabaseExporter {
         return valuePairList;
     }
 
-
     private void export(List<ValuePair> isbnBookIdList) throws ClassNotFoundException, SQLException, JsonProcessingException {
         List<ContentsDocument> contentsList = new ArrayList<>();
-        Set<String> finishedISBNs = new HashSet<>();
         Class.forName(JDBC_DRIVER);
         try (Connection connection = DriverManager.getConnection(CONNECTION_PARAMS)) {
             PreparedStatement bookStatement = connection.prepareStatement(SELECT_BOOK_STATEMENT);
             PreparedStatement descriptionStatement = connection.prepareStatement(SELECT_DESCRIPTION_STATEMENT);
             PreparedStatement imageStatement = connection.prepareStatement(SELECT_IMAGE_STATEMENT);
             for (ValuePair valuePair : isbnBookIdList) {
-                this.exportIsbnToDynamoDB(contentsList, finishedISBNs, bookStatement, descriptionStatement,
-                        imageStatement, valuePair.isbn, valuePair.bookId);
+                this.exportIsbnToDynamoDB(contentsList, bookStatement, descriptionStatement, imageStatement,
+                    valuePair.isbn, valuePair.bookId);
             }
         }
         System.out.println(NUMBER_OF_ISBN_SEND + finishedISBNs.size());
@@ -142,7 +149,6 @@ public class ContentsDatabaseExporter {
 
     private void export() throws ClassNotFoundException, SQLException, JsonProcessingException {
         List<ContentsDocument> contentsList = new ArrayList<>();
-        Set<String> finishedISBNs = new HashSet<>();
         Class.forName(JDBC_DRIVER);
         try (Connection connection = DriverManager.getConnection(CONNECTION_PARAMS)) {
             PreparedStatement isbnStatement = connection.prepareStatement(SELECT_ISBN_STATEMENT);
@@ -153,18 +159,19 @@ public class ContentsDatabaseExporter {
             while (isbnResultSet.next()) {
                 String isbn = isbnResultSet.getString(COLUMN_ISBN);
                 String bookId = isbnResultSet.getString(COLUMN_BOOK_ID);
-                this.exportIsbnToDynamoDB(contentsList, finishedISBNs, bookStatement, descriptionStatement, imageStatement, isbn, bookId);
+                this.exportIsbnToDynamoDB(contentsList, bookStatement, descriptionStatement, imageStatement,
+                    isbn, bookId);
             }
         }
         System.out.println(NUMBER_OF_ISBN_SEND + finishedISBNs.size());
         System.out.println(NUMBER_OF_SUCCESSFUL_ISBN + contentsList.size());
     }
 
-    private void exportIsbnToDynamoDB(List<ContentsDocument> contentsList, Set<String> finishedISBNs,
+    private void exportIsbnToDynamoDB(List<ContentsDocument> contentsList,
                                       PreparedStatement bookStatement, PreparedStatement descriptionStatement,
                                       PreparedStatement imageStatement, String isbn, String bookId)
             throws SQLException, JsonProcessingException {
-        System.out.println(String.format("Done with %d isbns", finishedISBNs.size()));
+        System.out.printf("Done with %d isbns%n", finishedISBNs.size());
         if (finishedISBNs.contains(isbn)) {
             System.out.println(DUPLICATE_ISBN_ID + isbn + FOR_BOOK_ID + bookId);
         } else {
@@ -180,8 +187,8 @@ public class ContentsDatabaseExporter {
                 String payload = mapper.writeValueAsString(new ContentsPayload(contentsDocument));
                 try {
                     System.out.println(SENDING + payload);
-                    String response = this.sendContents(payload);
-                    System.out.println(RESPONSE + response);
+                    //String response = this.sendContents(payload);
+                    //System.out.println(RESPONSE + response);
                     contentsList.add(contentsDocument);
                 } catch (Exception e) {
                     System.out.println(Instant.now());
@@ -193,12 +200,22 @@ public class ContentsDatabaseExporter {
                 System.out.println(INSUFFICIENT_DATA_ON_CONTENTS + isbn);
             }
             finishedISBNs.add(isbn);
+            this.appendToFinishedIsbnFile(isbn + System.lineSeparator());
         }
     }
 
     private void appendToFailedIsbnFile(String failedRow) {
         try {
-            FileUtils.writeStringToFile(file, failedRow, StandardCharsets.UTF_8, true);
+            FileUtils.writeStringToFile(failed_file, failedRow, StandardCharsets.UTF_8, true);
+        } catch (IOException e) {
+            System.out.println(FAILED_TO_APPEND_TO_FILE + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    private void appendToFinishedIsbnFile(String finishedISBN) {
+        try {
+            FileUtils.writeStringToFile(finished_file, finishedISBN, StandardCharsets.UTF_8, true);
         } catch (IOException e) {
             System.out.println(FAILED_TO_APPEND_TO_FILE + e.getMessage());
             e.printStackTrace();
