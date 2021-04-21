@@ -23,7 +23,6 @@ import javax.ws.rs.HttpMethod;
 import javax.ws.rs.core.HttpHeaders;
 import javax.ws.rs.core.MediaType;
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -36,24 +35,18 @@ import java.util.Set;
 public class ContentsDatabaseExporter {
 
     private static final String FAILED_ISBN_CSV = "failedIsbn.csv";
-    private static final String FINISHED_ISBN_TXT = "fìnishedIsbn.txt";
+    private static final String FINISHED_ISBN_TXT = "processedIsbns.txt";
     private static final String IMAGES_BASE_URL = "https://contents.bibsys.no/content/images/";
     private static final String CONTENTS_API_URL = "https://api.sandbox.bibs.aws.unit.no/contents";
-    private static final String DATABASE_URI = "jdbc:mysql://mysql.bibsys.no/contents";
-    private static final String JDBC_DRIVER = "com.mysql.jdbc.Driver";
-    private static final String USER = "NO_DEFAULT_USER";
-    private static final String PASSWORD = "NO_DEFAULT_PASSWORD";
-    private static final String CONNECTION_PARAMS =
-            String.format("%s?user=%s&password=%s", DATABASE_URI, USER, PASSWORD);
 
     private static final String SELECT_ISBN_STATEMENT =
-            "SELECT `book_id`, `value` AS `isbn` FROM `identificator` ORDER BY `value`";
+        "SELECT `book_id`, `value` AS `isbn` FROM `identificator` ORDER BY `value`";
     private static final String SELECT_BOOK_STATEMENT =
-            "SELECT `id` AS `book_id`, `title`, `year` FROM `book` WHERE `id` = ?";
+        "SELECT `id` AS `book_id`, `title`, `year` FROM `book` WHERE `id` = ?";
     private static final String SELECT_DESCRIPTION_STATEMENT =
-            "SELECT `book_id`, `type`, `text`, `source` FROM `description` WHERE `book_id` = ?";
+        "SELECT `book_id`, `type`, `text`, `source` FROM `description` WHERE `book_id` = ?";
     private static final String SELECT_IMAGE_STATEMENT =
-            "SELECT `book_id`, `path`, `type`, `source` FROM `image` WHERE `book_id` = ?";
+        "SELECT `book_id`, `path`, `type`, `source` FROM `image` WHERE `book_id` = ?";
 
     public static final String COLUMN_ISBN = "isbn";
     public static final String COLUMN_BOOK_ID = "book_id";
@@ -79,12 +72,13 @@ public class ContentsDatabaseExporter {
 
     public static final String UNKNOWN_METADATA_TYPE = "Unknown metadata type: ";
     public static final String WITH_VALUE = "with value: ";
-    public static final String DUPLICATE_ISBN_ID = "Duplicate isbn ";
+    public static final String ALREADY_PROCESSED_ISBN = "Already processed isbn";
     public static final String FOR_BOOK_ID = " for book_id ";
     public static final String THAT_DID_NOT_GO_WELL = "That did not go well: ";
     public static final String NUMBER_OF_ISBN_SEND = "Number of isbn send: ";
     public static final String NUMBER_OF_SUCCESSFUL_ISBN = "Number of successful isbn: ";
-    public static final String INSUFFICIENT_DATA_ON_CONTENTS = "ContentsDocument does not have sufficient metadata and has thus been ignored: ";
+    public static final String INSUFFICIENT_DATA_ON_CONTENTS = "ContentsDocument does not have sufficient metadata "
+        + "and has thus been ignored: ";
     public static final String SENDING = "SENDING...";
     public static final String RESPONSE = "RESPONSE: ";
     public static final String FAILED_TO_APPEND_TO_FILE = "Failed to append to file ";
@@ -99,7 +93,6 @@ public class ContentsDatabaseExporter {
     public ContentsDatabaseExporter() {
         mapper.setSerializationInclusion(JsonInclude.Include.NON_NULL).writerWithDefaultPrettyPrinter();
     }
-
 
     public static void main(String[] args) throws SQLException, ClassNotFoundException, IOException {
         System.out.println("Started " + Instant.now());
@@ -131,76 +124,76 @@ public class ContentsDatabaseExporter {
         return valuePairList;
     }
 
-    private void export(List<ValuePair> isbnBookIdList) throws ClassNotFoundException, SQLException, JsonProcessingException {
+    private void export(List<ValuePair> isbnBookIdList)
+        throws SQLException, JsonProcessingException, ClassNotFoundException {
         List<ContentsDocument> contentsList = new ArrayList<>();
-        Class.forName(JDBC_DRIVER);
-        try (Connection connection = DriverManager.getConnection(CONNECTION_PARAMS)) {
-            PreparedStatement bookStatement = connection.prepareStatement(SELECT_BOOK_STATEMENT);
-            PreparedStatement descriptionStatement = connection.prepareStatement(SELECT_DESCRIPTION_STATEMENT);
-            PreparedStatement imageStatement = connection.prepareStatement(SELECT_IMAGE_STATEMENT);
-            for (ValuePair valuePair : isbnBookIdList) {
-                this.exportIsbnToDynamoDB(contentsList, bookStatement, descriptionStatement, imageStatement,
-                    valuePair.isbn, valuePair.bookId);
-            }
+        for (ValuePair valuePair : isbnBookIdList) {
+            this.exportIsbnToDynamoDB(contentsList, valuePair);
         }
         System.out.println(NUMBER_OF_ISBN_SEND + finishedISBNs.size());
         System.out.println(NUMBER_OF_SUCCESSFUL_ISBN + contentsList.size());
     }
 
-    private void export() throws ClassNotFoundException, SQLException, JsonProcessingException {
+    private void export() throws SQLException, JsonProcessingException, ClassNotFoundException {
         List<ContentsDocument> contentsList = new ArrayList<>();
-        Class.forName(JDBC_DRIVER);
-        try (Connection connection = DriverManager.getConnection(CONNECTION_PARAMS)) {
+        List<ValuePair> isbnBookIdList = new ArrayList<>();
+        MySQLConnection mysql = new MySQLConnection();
+        try (Connection connection = mysql.getConnection()) {
             PreparedStatement isbnStatement = connection.prepareStatement(SELECT_ISBN_STATEMENT);
-            PreparedStatement bookStatement = connection.prepareStatement(SELECT_BOOK_STATEMENT);
-            PreparedStatement descriptionStatement = connection.prepareStatement(SELECT_DESCRIPTION_STATEMENT);
-            PreparedStatement imageStatement = connection.prepareStatement(SELECT_IMAGE_STATEMENT);
             ResultSet isbnResultSet = isbnStatement.executeQuery();
             while (isbnResultSet.next()) {
                 String isbn = isbnResultSet.getString(COLUMN_ISBN);
                 String bookId = isbnResultSet.getString(COLUMN_BOOK_ID);
-                this.exportIsbnToDynamoDB(contentsList, bookStatement, descriptionStatement, imageStatement,
-                    isbn, bookId);
+                isbnBookIdList.add(new ValuePair(isbn, bookId));
             }
+        }
+        System.out.printf("We have %d ISBNs to process.%n", isbnBookIdList.size());
+        for (ValuePair valuePair : isbnBookIdList) {
+            this.exportIsbnToDynamoDB(contentsList, valuePair);
         }
         System.out.println(NUMBER_OF_ISBN_SEND + finishedISBNs.size());
         System.out.println(NUMBER_OF_SUCCESSFUL_ISBN + contentsList.size());
     }
 
-    private void exportIsbnToDynamoDB(List<ContentsDocument> contentsList,
-                                      PreparedStatement bookStatement, PreparedStatement descriptionStatement,
-                                      PreparedStatement imageStatement, String isbn, String bookId)
-            throws SQLException, JsonProcessingException {
+    private void exportIsbnToDynamoDB(List<ContentsDocument> contentsList, ValuePair pair)
+        throws SQLException, JsonProcessingException, ClassNotFoundException {
+
         System.out.printf("Done with %d isbns%n", finishedISBNs.size());
-        if (finishedISBNs.contains(isbn)) {
-            System.out.println(DUPLICATE_ISBN_ID + isbn + FOR_BOOK_ID + bookId);
-        } else {
-            ContentsDocument contentsDocument = this.createContentsDocument(isbn);
-            bookStatement.setString(1, bookId);
-            this.findBookMetadata(bookStatement, contentsDocument);
-            descriptionStatement.setString(1, bookId);
-            this.findDescriptionData(descriptionStatement, contentsDocument);
-            imageStatement.setString(1, bookId);
-            this.findImagePath(imageStatement, contentsDocument);
-            boolean isValidContentsDocument = this.checkValidity(contentsDocument);
-            if (isValidContentsDocument) {
-                String payload = mapper.writeValueAsString(new ContentsPayload(contentsDocument));
-                try {
-                    System.out.println(SENDING + payload);
-                    //String response = this.sendContents(payload);
-                    //System.out.println(RESPONSE + response);
-                    contentsList.add(contentsDocument);
-                } catch (Exception e) {
-                    System.out.println(Instant.now());
-                    System.out.println(THAT_DID_NOT_GO_WELL + e.getMessage());
-                    e.printStackTrace();
-                    this.appendToFailedIsbnFile(isbn + COMMA + bookId);
-                }
+        MySQLConnection mysql = new MySQLConnection();
+        try (Connection connection = mysql.getConnection()) {
+            PreparedStatement bookStatement = connection.prepareStatement(SELECT_BOOK_STATEMENT);
+            PreparedStatement descriptionStatement = connection.prepareStatement(SELECT_DESCRIPTION_STATEMENT);
+            PreparedStatement imageStatement = connection.prepareStatement(SELECT_IMAGE_STATEMENT);
+            if (finishedISBNs.contains(pair.isbn)) {
+                System.out.println(ALREADY_PROCESSED_ISBN + pair.isbn + FOR_BOOK_ID + pair.bookId);
             } else {
-                System.out.println(INSUFFICIENT_DATA_ON_CONTENTS + isbn);
+                ContentsDocument contentsDocument = this.createContentsDocument(pair.isbn);
+                bookStatement.setString(1, pair.bookId);
+                this.findBookMetadata(bookStatement, contentsDocument);
+                descriptionStatement.setString(1, pair.bookId);
+                this.findDescriptionData(descriptionStatement, contentsDocument);
+                imageStatement.setString(1, pair.bookId);
+                this.findImagePath(imageStatement, contentsDocument);
+                boolean isValidContentsDocument = this.checkValidity(contentsDocument);
+                if (isValidContentsDocument) {
+                    String payload = mapper.writeValueAsString(new ContentsPayload(contentsDocument));
+                    try {
+                        System.out.println(SENDING + payload);
+                        String response = this.sendContents(payload);
+                        System.out.println(RESPONSE + response);
+                        contentsList.add(contentsDocument);
+                    } catch (Exception e) {
+                        System.out.println(Instant.now());
+                        System.out.println(THAT_DID_NOT_GO_WELL + e.getMessage());
+                        e.printStackTrace();
+                        this.appendToFailedIsbnFile(pair.isbn + COMMA + pair.bookId);
+                    }
+                } else {
+                    System.out.println(INSUFFICIENT_DATA_ON_CONTENTS + pair.isbn);
+                }
+                finishedISBNs.add(pair.isbn);
+                this.appendToFinishedIsbnFile(pair.isbn + System.lineSeparator());
             }
-            finishedISBNs.add(isbn);
-            this.appendToFinishedIsbnFile(isbn + System.lineSeparator());
         }
     }
 
@@ -231,18 +224,18 @@ public class ContentsDatabaseExporter {
         }
         StringBuilder tempDesc = new StringBuilder();
         tempDesc.append(contents.descriptionShort)
-                .append(contents.descriptionLong)
-                .append(contents.tableOfContents)
-                .append(contents.author)
-                .append(contents.summary)
-                .append(contents.review)
-                .append(contents.promotional);
+            .append(contents.descriptionLong)
+            .append(contents.tableOfContents)
+            .append(contents.author)
+            .append(contents.summary)
+            .append(contents.review)
+            .append(contents.promotional);
         StringBuilder tempImg = new StringBuilder();
         tempImg.append(contents.imageSmall)
-                .append(contents.imageLarge)
-                .append(contents.imageOriginal);
+            .append(contents.imageLarge)
+            .append(contents.imageOriginal);
         if (StringUtils.isEmptyOrWhitespaceOnly(tempDesc.toString()) &&
-                StringUtils.isEmptyOrWhitespaceOnly(tempImg.toString())) {
+            StringUtils.isEmptyOrWhitespaceOnly(tempImg.toString())) {
             return false;
         }
         return true;
@@ -253,7 +246,7 @@ public class ContentsDatabaseExporter {
         HttpURLConnection con = (HttpURLConnection) url.openConnection();
         con.setRequestMethod(HttpMethod.POST);
         con.setRequestProperty(HttpHeaders.CONTENT_TYPE,
-                MediaType.APPLICATION_JSON_TYPE.withCharset(StandardCharsets.UTF_8.name()).toString());
+            MediaType.APPLICATION_JSON_TYPE.withCharset(StandardCharsets.UTF_8.name()).toString());
         con.setRequestProperty(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_TYPE.toString());
         con.setDoOutput(true);
         try (OutputStream os = con.getOutputStream()) {
@@ -261,7 +254,7 @@ public class ContentsDatabaseExporter {
             os.write(input, 0, input.length);
         }
         try (BufferedReader br = new BufferedReader(
-                new InputStreamReader(con.getInputStream(), StandardCharsets.UTF_8))) {
+            new InputStreamReader(con.getInputStream(), StandardCharsets.UTF_8))) {
             StringBuilder response = new StringBuilder();
             String responseLine;
             while ((responseLine = br.readLine()) != null) {
@@ -269,7 +262,6 @@ public class ContentsDatabaseExporter {
             }
             return response.toString();
         }
-
     }
 
     private void findImagePath(PreparedStatement statement, ContentsDocument contentsDocument) throws SQLException {
@@ -311,7 +303,7 @@ public class ContentsDatabaseExporter {
     }
 
     private boolean isImagePresent(String urlpath) {
-        boolean imageIsPresent= false;
+        boolean imageIsPresent = false;
         try {
             URL url = new URL(urlpath);
             HttpURLConnection.setFollowRedirects(true);
@@ -351,7 +343,7 @@ public class ContentsDatabaseExporter {
     }
 
     private void findDescriptionData(PreparedStatement statement, ContentsDocument contentsDocument)
-            throws SQLException {
+        throws SQLException {
         ResultSet resultSet = statement.executeQuery();
         while (resultSet.next()) {
             String type = resultSet.getString(COLUMN_TYPE);
@@ -412,5 +404,4 @@ public class ContentsDatabaseExporter {
     private ContentsDocument createContentsDocument(String isbn) {
         return new ContentsDocument(isbn);
     }
-
 }
