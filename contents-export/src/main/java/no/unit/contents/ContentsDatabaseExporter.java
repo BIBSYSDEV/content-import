@@ -13,6 +13,8 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mysql.jdbc.StringUtils;
+import java.util.SortedSet;
+import java.util.TreeSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.apache.commons.io.FileUtils;
@@ -28,9 +30,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 
 public class ContentsDatabaseExporter {
 
@@ -40,7 +40,7 @@ public class ContentsDatabaseExporter {
     private static final String CONTENTS_API_URL = "https://api.sandbox.bibs.aws.unit.no/contents";
 
     private static final String SELECT_ISBN_STATEMENT =
-        "SELECT `book_id`, `value` AS `isbn` FROM `identificator` ORDER BY `value`";
+        "SELECT `book_id`, `value` AS `isbn` FROM `identificator` WHERE value > ? ORDER BY `value`";
     private static final String SELECT_BOOK_STATEMENT =
         "SELECT `id` AS `book_id`, `title`, `year` FROM `book` WHERE `id` = ?";
     private static final String SELECT_DESCRIPTION_STATEMENT =
@@ -72,7 +72,7 @@ public class ContentsDatabaseExporter {
 
     public static final String UNKNOWN_METADATA_TYPE = "Unknown metadata type: ";
     public static final String WITH_VALUE = "with value: ";
-    public static final String ALREADY_PROCESSED_ISBN = "Already processed isbn";
+    public static final String ALREADY_PROCESSED_ISBN = "Already processed isbn ";
     public static final String FOR_BOOK_ID = " for book_id ";
     public static final String THAT_DID_NOT_GO_WELL = "That did not go well: ";
     public static final String NUMBER_OF_ISBN_SEND = "Number of isbn send: ";
@@ -84,11 +84,15 @@ public class ContentsDatabaseExporter {
     public static final String FAILED_TO_APPEND_TO_FILE = "Failed to append to file ";
     public static final String SLASH = "/";
     public static final String ESCAPED_DOT = "\\.";
+    public static final String LAST_PROCESSED_ISBN_WAS = "last processed isbn was: ";
+    public static final String ISBNS_TO_PROCESS_N = "We have %d ISBNs to process.%n";
+    public static final String DONE_WITH_D_ISBNS_N = "Done with %d isbns%n";
 
     private final ObjectMapper mapper = new ObjectMapper();
     private static final File failed_file = new File(FAILED_ISBN_CSV);
     private static final File finished_file = new File(FINISHED_ISBN_TXT);
-    private static Set<String> finishedISBNs = new HashSet<>();
+    private static SortedSet<String> finishedISBNs = new TreeSet<>();
+    private final MySQLConnection mysql = new MySQLConnection();
 
     public ContentsDatabaseExporter() {
         mapper.setSerializationInclusion(JsonInclude.Include.NON_NULL).writerWithDefaultPrettyPrinter();
@@ -137,9 +141,14 @@ public class ContentsDatabaseExporter {
     private void export() throws SQLException, JsonProcessingException, ClassNotFoundException {
         List<ContentsDocument> contentsList = new ArrayList<>();
         List<ValuePair> isbnBookIdList = new ArrayList<>();
-        MySQLConnection mysql = new MySQLConnection();
+        String lastIsbn = "0";
+        if (!finishedISBNs.isEmpty()) {
+            lastIsbn = finishedISBNs.last();
+        }
+        System.out.println(LAST_PROCESSED_ISBN_WAS + lastIsbn);
         try (Connection connection = mysql.getConnection()) {
             PreparedStatement isbnStatement = connection.prepareStatement(SELECT_ISBN_STATEMENT);
+            isbnStatement.setString(1, lastIsbn);
             ResultSet isbnResultSet = isbnStatement.executeQuery();
             while (isbnResultSet.next()) {
                 String isbn = isbnResultSet.getString(COLUMN_ISBN);
@@ -147,7 +156,7 @@ public class ContentsDatabaseExporter {
                 isbnBookIdList.add(new ValuePair(isbn, bookId));
             }
         }
-        System.out.printf("We have %d ISBNs to process.%n", isbnBookIdList.size());
+        System.out.printf(ISBNS_TO_PROCESS_N, isbnBookIdList.size());
         for (ValuePair valuePair : isbnBookIdList) {
             this.exportIsbnToDynamoDB(contentsList, valuePair);
         }
@@ -158,7 +167,7 @@ public class ContentsDatabaseExporter {
     private void exportIsbnToDynamoDB(List<ContentsDocument> contentsList, ValuePair pair)
         throws SQLException, JsonProcessingException, ClassNotFoundException {
 
-        System.out.printf("Done with %d isbns%n", finishedISBNs.size());
+        System.out.printf(DONE_WITH_D_ISBNS_N, finishedISBNs.size());
         MySQLConnection mysql = new MySQLConnection();
         try (Connection connection = mysql.getConnection()) {
             PreparedStatement bookStatement = connection.prepareStatement(SELECT_BOOK_STATEMENT);
