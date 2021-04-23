@@ -3,10 +3,12 @@ package no.unit.contents;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.net.http.HttpClient;
 import java.nio.charset.StandardCharsets;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
@@ -18,6 +20,16 @@ import java.util.TreeSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.apache.commons.io.FileUtils;
+import org.apache.http.HttpEntity;
+import org.apache.http.HttpResponse;
+import org.apache.http.NameValuePair;
+import org.apache.http.client.entity.UrlEncodedFormEntity;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.entity.ContentType;
+import org.apache.http.entity.StringEntity;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClients;
+import org.apache.http.message.BasicNameValuePair;
 import org.jsoup.Jsoup;
 import org.jsoup.safety.Whitelist;
 
@@ -185,7 +197,8 @@ public class ContentsDatabaseExporter {
                 this.findImagePath(imageStatement, contentsDocument);
                 boolean isValidContentsDocument = this.checkValidity(contentsDocument);
                 if (isValidContentsDocument) {
-                    String payload = mapper.writeValueAsString(new ContentsPayload(contentsDocument));
+                    final ContentsPayload contentsPayload = new ContentsPayload(contentsDocument);
+                    String payload = mapper.writeValueAsString(contentsPayload);
                     try {
                         System.out.println(SENDING + payload);
                         String response = this.sendContents(payload);
@@ -251,26 +264,31 @@ public class ContentsDatabaseExporter {
     }
 
     private String sendContents(String payload) throws IOException {
-        URL url = new URL(CONTENTS_API_URL);
-        HttpURLConnection con = (HttpURLConnection) url.openConnection();
-        con.setRequestMethod(HttpMethod.POST);
-        con.setRequestProperty(HttpHeaders.CONTENT_TYPE,
-            MediaType.APPLICATION_JSON_TYPE.withCharset(StandardCharsets.UTF_8.name()).toString());
-        con.setRequestProperty(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_TYPE.toString());
-        con.setDoOutput(true);
-        try (OutputStream os = con.getOutputStream()) {
-            byte[] input = payload.getBytes(StandardCharsets.UTF_8);
-            os.write(input, 0, input.length);
-        }
-        try (BufferedReader br = new BufferedReader(
-            new InputStreamReader(con.getInputStream(), StandardCharsets.UTF_8))) {
-            StringBuilder response = new StringBuilder();
-            String responseLine;
-            while ((responseLine = br.readLine()) != null) {
-                response.append(responseLine.trim());
+        CloseableHttpClient httpclient = HttpClients.createDefault();
+        HttpPost httppost = new HttpPost(CONTENTS_API_URL);
+
+        StringEntity entity = new StringEntity(payload);
+        entity.setContentType(ContentType.APPLICATION_JSON.getMimeType());
+
+        httppost.setEntity(entity);
+        httppost.setHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_TYPE.toString());
+
+        //Execute and get the response.
+        HttpResponse response = httpclient.execute(httppost);
+        HttpEntity responseEntity = response.getEntity();
+
+        if (responseEntity != null) {
+            try (BufferedReader br = new BufferedReader(
+                new InputStreamReader(responseEntity.getContent(), StandardCharsets.UTF_8))) {
+                StringBuilder resp = new StringBuilder();
+                String responseLine;
+                while ((responseLine = br.readLine()) != null) {
+                    resp.append(responseLine.trim());
+                }
+                return resp.toString();
             }
-            return response.toString();
         }
+        return null;
     }
 
     private void findImagePath(PreparedStatement statement, ContentsDocument contentsDocument) throws SQLException {
