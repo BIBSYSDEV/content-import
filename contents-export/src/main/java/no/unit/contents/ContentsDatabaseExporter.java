@@ -3,12 +3,9 @@ package no.unit.contents;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.net.http.HttpClient;
 import java.nio.charset.StandardCharsets;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
@@ -19,19 +16,14 @@ import java.util.SortedSet;
 import java.util.TreeSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import javax.swing.text.html.HTML;
 import org.apache.commons.io.FileUtils;
-import org.apache.commons.text.StringEscapeUtils;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
-import org.apache.http.NameValuePair;
-import org.apache.http.client.entity.UrlEncodedFormEntity;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.entity.ContentType;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
-import org.apache.http.message.BasicNameValuePair;
 import org.jsoup.Jsoup;
 import org.jsoup.safety.Whitelist;
 
@@ -379,7 +371,6 @@ public class ContentsDatabaseExporter {
             String text = resultSet.getString(COLUMN_TEXT);
             text = preventNullString(text);
             text = Jsoup.clean(text, Whitelist.relaxed());
-            text = StringEscapeUtils.unescapeHtml4(text);
             String descLong = EMPTY_STRING;
             switch (type) {
                 case AUTHOR_TYPE:
