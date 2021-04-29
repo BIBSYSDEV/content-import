@@ -19,7 +19,9 @@ import java.util.SortedSet;
 import java.util.TreeSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import javax.swing.text.html.HTML;
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.text.StringEscapeUtils;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
 import org.apache.http.NameValuePair;
@@ -369,7 +371,7 @@ public class ContentsDatabaseExporter {
         return urlpath;
     }
 
-    private void findDescriptionData(PreparedStatement statement, ContentsDocument contentsDocument)
+    public void findDescriptionData(PreparedStatement statement, ContentsDocument contentsDocument)
         throws SQLException {
         ResultSet resultSet = statement.executeQuery();
         while (resultSet.next()) {
@@ -377,6 +379,7 @@ public class ContentsDatabaseExporter {
             String text = resultSet.getString(COLUMN_TEXT);
             text = preventNullString(text);
             text = Jsoup.clean(text, Whitelist.relaxed());
+            text = StringEscapeUtils.unescapeHtml4(text);
             String descLong = EMPTY_STRING;
             switch (type) {
                 case AUTHOR_TYPE:
