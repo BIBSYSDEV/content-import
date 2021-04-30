@@ -1,7 +1,6 @@
 package no.unit.ontents;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -10,7 +9,6 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import no.unit.contents.ContentsDatabaseExporter;
 import no.unit.contents.ContentsDocument;
-import org.apache.commons.text.StringEscapeUtils;
 import org.junit.jupiter.api.Test;
 
 class ContentsDatabaseExporterTest {
