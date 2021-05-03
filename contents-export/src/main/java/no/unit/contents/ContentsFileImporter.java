@@ -23,7 +23,6 @@ public class ContentsFileImporter {
     public static final String JPG_FILE_EXTENSION = ".jpg";
     public static final String NIELSEN = "NIELSEN";
     private static SortedSet<String> finishedISBNs = new TreeSet<>();
-//    private ContentsDatabaseExporter exporter = new ContentsDatabaseExporter();
     private final ObjectMapper mapper = new ObjectMapper();
     private final NielsenFileReader nielsenFileReader;
 
