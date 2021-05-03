@@ -25,6 +25,8 @@ public class ContentsFileImporter {
     private static SortedSet<String> finishedISBNs = new TreeSet<>();
     private final ObjectMapper mapper = new ObjectMapper();
     private final NielsenFileReader nielsenFileReader;
+    //TODO: bremove breaks for testing
+    private final int HARD_STOPP = 10;
 
     public ContentsFileImporter() {
         mapper.setSerializationInclusion(JsonInclude.Include.NON_NULL).writerWithDefaultPrettyPrinter();
@@ -62,6 +64,9 @@ public class ContentsFileImporter {
         System.out.printf(ContentsUtil.ISBNS_TO_PROCESS, isbnSet.size());
         for (String isbn : isbnSet) {
             this.exportIsbnToDynamoDB(contentsList, isbn);
+            if (finishedISBNs.size() > HARD_STOPP) {
+                break;
+            }
         }
         System.out.println(ContentsUtil.NUMBER_OF_ISBN_SEND + finishedISBNs.size());
         System.out.println(ContentsUtil.NUMBER_OF_SUCCESSFUL_ISBN + contentsList.size());

@@ -5,6 +5,7 @@ import com.fasterxml.jackson.dataformat.xml.XmlMapper;
 
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -14,11 +15,12 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public class NielsenFileReader {
 
-    private static final String CONTENTS_DIR = "\\Nielsen\\data";
-    private static final String IMAGE_DIR = "..\\ar\\Nielsen_datadump_april_2021\\images";
+    private static final String CONTENTS_DIR = "/pywork/ar/Nielsen datadump april 2021/data/";
+    private static final String IMAGE_DIR = "/pywork/ar/Nielsen datadump april 2021/images/";
     private final List<String> isbnRecordsList = new ArrayList<>();
     private final List<String> isbnImageList = new ArrayList<>();
     private final List<Record> records = new ArrayList<>();
@@ -37,27 +39,44 @@ public class NielsenFileReader {
     }
 
     private void loadIsbns() {
-        System.out.println("Reading ISBN");
+        System.out.println("Reading ISBN from " + CONTENTS_DIR);
+        try (Stream<Path> paths = Files.walk(Paths.get(CONTENTS_DIR))) {
+            paths.filter(Files::isRegularFile)
+                    .forEach(System.out::println);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
         try {
             Files.list(Paths.get(CONTENTS_DIR))
                     .filter(file -> !file.toFile().isDirectory())
                     .forEach(file -> {
-                        try {
-                            isbnRecordsList.addAll(Files.lines(file)
-                                    .filter(line -> line.startsWith("<ISBN13>"))
-                                    .map(line -> line.replace("<ISBN13>", "").replace("</ISBN13>", ""))
-                                    .collect(Collectors.toList()));
-                        } catch (IOException e) {
-                            e.printStackTrace();
+                        System.out.println("Reading file: " + file.getFileName());
+                        if (file.getFileName().toString().endsWith(".add")) {
+                            System.out.println("Parsing file: " + file.getFileName());
+                            try {
+                                isbnRecordsList.addAll(Files.lines(file)
+                                        .filter(line -> line.startsWith("<ISBN13>"))
+                                        .map(line -> line.replace("<ISBN13>", "").replace("</ISBN13>", ""))
+                                        .collect(Collectors.toList()));
+                            } catch (IOException e) {
+                                System.out.println("Failed while reading file: " + file.getFileName());
+                                e.printStackTrace();
+                            }
                         }
                     });
         } catch (IOException e) {
+            System.out.println("Not good reading metadata-files.");
             e.printStackTrace();
         }
 
         System.out.println("Done!");
 
-        System.out.println(isbnRecordsList.size());
+        System.out.println("No of isbn from metadata files: " + isbnRecordsList.size());
+
+        if (isbnRecordsList.isEmpty()) {
+            System.out.println("We stop since we were not able to read metadata.");
+            System.exit(1);
+        }
 
         System.out.println("Counting images");
         int imageCount = -1;
@@ -90,7 +109,7 @@ public class NielsenFileReader {
             e.printStackTrace();
         }
         System.out.println("Done!");
-        System.out.println(imageCount);
+        System.out.println("No of image isbns: " + imageCount);
         System.out.println(isbnImageList.size());
 
         long start = System.currentTimeMillis();
@@ -98,12 +117,12 @@ public class NielsenFileReader {
         List<String> foundImageList =
                 isbnImageList.stream().filter(isbn -> {
                     if (foundCount.incrementAndGet() % 1000 == 0) {
-                        System.out.println(System.currentTimeMillis() - start);
+//                        System.out.println(System.currentTimeMillis() - start);
                         System.out.println(foundCount);
                     }
                     return isbnRecordsList.contains(isbn);
                 }).collect(Collectors.toList());
-        System.out.println(foundImageList.size());
+        System.out.println("Found image size List: " + foundImageList.size());
     }
 
     public void processFiles() {
@@ -138,7 +157,7 @@ public class NielsenFileReader {
 //                            })
 //                            .collect(Collectors.toList()).size();
             System.out.println(System.currentTimeMillis() - start);
-            System.out.println(records.size());
+            System.out.println("No of records: " + records.size());
             AtomicInteger briefDesc = new AtomicInteger();
             AtomicInteger fullDesc = new AtomicInteger();
             AtomicInteger toc = new AtomicInteger();

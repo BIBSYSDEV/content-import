@@ -1,6 +1,10 @@
 plugins {
     id 'java'
 }
+compileJava {
+    sourceCompatibility = '1.8'
+    targetCompatibility = '1.8'
+}
 
 group 'no.unit.contents'
 version '1.0-SNAPSHOT'
@@ -27,12 +31,9 @@ test {
     useJUnitPlatform()
 }
 
-
 jar {
-    manifest {
-        attributes(
-                'Main-Class': 'no.unit.contents.ContentsDatabaseExporter'
-        )
+    manifest{
+        attributes ('Main-Class': 'no.unit.contents.ContentsFileImporter')
     }
     from {
         configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
