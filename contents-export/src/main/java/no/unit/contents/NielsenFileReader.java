@@ -3,16 +3,12 @@ package no.unit.contents;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.dataformat.xml.XmlMapper;
 
+import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.TreeSet;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -21,31 +17,33 @@ public class NielsenFileReader {
 
     private static final String CONTENTS_DIR = "/pywork/ar/Nielsen datadump april 2021/data/";
     private static final String IMAGE_DIR = "/pywork/ar/Nielsen datadump april 2021/images/";
-    private final List<String> isbnRecordsList = new ArrayList<>();
-    private final List<String> isbnImageList = new ArrayList<>();
-    private final List<Record> records = new ArrayList<>();
-    private final Map<String, Record> recordsMap = new HashMap<>();
+    private final List<File> fileList = new ArrayList<>();
+    private final Set<String> isbnRecordsList = new HashSet<>();
+    private final Set<String> isbnImageList = new HashSet<>();
 
-    public Set<String> getIsbnRecordsSortedSet() {
-        return new TreeSet<>(isbnRecordsList);
+    public Set<String> getIsbnRecordSet() {
+        return isbnRecordsList;
     }
 
-    public Set<String> getIsbnImagesSortedSet() {
-        return new TreeSet<>(isbnImageList);
+    public Set<String> getIsbnImageSet() {
+        return isbnImageList;
     }
 
-    public Map<String, Record> getRecordMap() {
-        return recordsMap;
+    public List<File> getFileList() {
+        return fileList;
     }
 
-    private void loadIsbns() {
+    protected void loadData() {
         System.out.println("Reading ISBN from " + CONTENTS_DIR);
         try (Stream<Path> paths = Files.walk(Paths.get(CONTENTS_DIR))) {
             paths.filter(Files::isRegularFile)
-                    .forEach(System.out::println);
+                    .forEach(path -> fileList.add(path.toFile()));
         } catch (IOException e) {
             e.printStackTrace();
         }
+
+        XmlMapper mapper = new XmlMapper();
+        mapper.enable(DeserializationFeature.ACCEPT_EMPTY_STRING_AS_NULL_OBJECT);
         try {
             Files.list(Paths.get(CONTENTS_DIR))
                     .filter(file -> !file.toFile().isDirectory())
@@ -82,8 +80,7 @@ public class NielsenFileReader {
         int imageCount = -1;
         try {
             imageCount =
-                    Files.list(Paths.get(IMAGE_DIR)).filter(file -> !file.toFile().isDirectory())
-                            .collect(Collectors.toList()).size();
+                    (int) Files.list(Paths.get(IMAGE_DIR)).filter(file -> !file.toFile().isDirectory()).count();
         } catch (IOException e1) {
             // TODO Auto-generated catch block
             e1.printStackTrace();
@@ -96,7 +93,6 @@ public class NielsenFileReader {
             AtomicInteger counter = new AtomicInteger();
             isbnImageList.addAll(Files.list(Paths.get(IMAGE_DIR))
                     .filter(file -> !file.toFile().isDirectory())
-//                    .filter(file -> isbnList.contains(file.getFileName().toString().toLowerCase().replace(".jpg", "")))
                     .map(file -> {
                         if (counter.incrementAndGet() % 1000 == 0) {
                             System.out.println(counter);
@@ -111,82 +107,22 @@ public class NielsenFileReader {
         System.out.println("Done!");
         System.out.println("No of image isbns: " + imageCount);
         System.out.println(isbnImageList.size());
-
-        long start = System.currentTimeMillis();
-        AtomicInteger foundCount = new AtomicInteger();
-        List<String> foundImageList =
-                isbnImageList.stream().filter(isbn -> {
-                    if (foundCount.incrementAndGet() % 1000 == 0) {
-//                        System.out.println(System.currentTimeMillis() - start);
-                        System.out.println(foundCount);
-                    }
-                    return isbnRecordsList.contains(isbn);
-                }).collect(Collectors.toList());
-        System.out.println("Found image size List: " + foundImageList.size());
     }
 
-    public void processFiles() {
-        this.loadIsbns();
+    public List<Record> readFile(File file) {
         XmlMapper mapper = new XmlMapper();
-        
         mapper.enable(DeserializationFeature.ACCEPT_EMPTY_STRING_AS_NULL_OBJECT);
         try {
-
             long start = System.currentTimeMillis();
-            Files.list(Paths.get(CONTENTS_DIR))
-                    .filter(file -> !Files.isDirectory(file))
-                    .forEach(file -> {
-                        try {
-                            List<Record> recordSubList = mapper.readValue(file.toFile(), NielsenBook.class).getRecord();
-                            records.addAll(recordSubList);
-                            for (Record record : recordSubList) {
-                                recordsMap.put(record.getIsbn13(), record);
-                            }
-                        } catch (IOException e) {
-                            e.printStackTrace();
-                        }
-                    });
-//            AtomicInteger imageCounter = new AtomicInteger();
-//            int imageCount =
-//                    records.stream()
-//                            .filter(record -> {
-//                                if (imageCounter.incrementAndGet() % 1000 == 0)
-//                                    System.out.println(imageCounter);
-//                                return Files
-//                                        .exists(Paths.get(String.format("%s/%s.jpg", IMAGE_DIR, record.getIsbn13())));
-//                            })
-//                            .collect(Collectors.toList()).size();
-            System.out.println(System.currentTimeMillis() - start);
-            System.out.println("No of records: " + records.size());
-            AtomicInteger briefDesc = new AtomicInteger();
-            AtomicInteger fullDesc = new AtomicInteger();
-            AtomicInteger toc = new AtomicInteger();
-            records.forEach(record -> {
-                if (record.getDescriptionBrief() != null)
-                    briefDesc.incrementAndGet();
-                if (record.getDescriptionFull() != null)
-                    fullDesc.incrementAndGet();
-                if (record.getTableOfContents() != null)
-                    toc.incrementAndGet();
-            });
-            System.out.printf("brief: %s%n", briefDesc);
-            System.out.printf("full: %s%n", fullDesc);
-            System.out.printf("toc: %s%n", toc);
-//            System.out.println(imageCount);
-
-            List<Record> noDescription =
-                    records.stream()
-                            .filter(record -> record.getDescriptionBrief() == null
-                                    && record.getDescriptionFull() == null && record.getTableOfContents() == null)
-                            .collect(Collectors.toList());
-            System.out.println(noDescription.size());
-            System.out.println(noDescription.stream()
-                    .filter(record -> !Files
-                            .exists(Paths.get(String.format("%s/%s.jpg", IMAGE_DIR, record.getIsbn13()))))
-                    .collect(Collectors.toList()).size());
+            System.out.println(start + " Start reading file " + file.getName());
+            List<Record> recordList = mapper.readValue(file, NielsenBook.class).getRecord();
+            long end = System.currentTimeMillis();
+            System.out.println(end + " Read " + recordList.size() + " records from file " + file.getName());
+            return recordList;
         } catch (IOException e) {
             e.printStackTrace();
         }
+        return new ArrayList<>();
     }
 
 }
