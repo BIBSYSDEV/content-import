@@ -13,6 +13,8 @@ import com.mysql.jdbc.StringUtils;
 
 import java.util.SortedSet;
 import java.util.TreeSet;
+import java.util.concurrent.ConcurrentSkipListSet;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
@@ -76,8 +78,8 @@ public class ContentsDatabaseExporter {
     private static final File failed_file = new File("failedIsbn.csv");
     private static final File finished_isbn_file = new File("processedIsbns.txt");
     private static final File finished_id_file = new File("processedIds.txt");
-    private static SortedSet<String> finishedISBNs = new TreeSet<>();
-    private static SortedSet<String> finishedIDs = new TreeSet<>();
+    private static SortedSet<String> finishedISBNs = new ConcurrentSkipListSet<>();
+    private static SortedSet<String> finishedIDs = new ConcurrentSkipListSet<>();
 
     private final ObjectMapper mapper = new ObjectMapper();
     private final MySQLConnection mysql = new MySQLConnection();
@@ -110,7 +112,7 @@ public class ContentsDatabaseExporter {
     }
 
     private List<Identificators> readFromFailedFile() throws IOException {
-        List<Identificators> identificatorsList = new ArrayList<>();
+        List<Identificators> identificatorsList = new CopyOnWriteArrayList<>();
         List<String> lines = FileUtils.readLines(failed_file, StandardCharsets.UTF_8);
         for (String line : lines) {
             String[] split = line.split(COMMA);
@@ -121,12 +123,10 @@ public class ContentsDatabaseExporter {
 
     private void export(List<Identificators> isbnBookIdList)
         throws SQLException, JsonProcessingException, ClassNotFoundException {
-        List<ContentsDocument> contentsList = new ArrayList<>();
         for (Identificators identificators : isbnBookIdList) {
             this.exportIsbnToDynamoDB(identificators);
         }
         System.out.println(ContentsUtil.NUMBER_OF_ISBN_SEND + finishedISBNs.size());
-        System.out.println(ContentsUtil.NUMBER_OF_SUCCESSFUL_ISBN + contentsList.size());
     }
 
     private void export() throws SQLException, ClassNotFoundException {
@@ -167,14 +167,14 @@ public class ContentsDatabaseExporter {
         throws SQLException, JsonProcessingException, ClassNotFoundException {
 
         System.out.printf(ContentsUtil.DONE_WITH_ISBNS, finishedISBNs.size());
-        MySQLConnection mysql = new MySQLConnection();
-        try (Connection connection = mysql.getConnection()) {
+        try (Connection connection = new MySQLConnection().getConnection()) {
             PreparedStatement bookStatement = connection.prepareStatement(SELECT_BOOK_STATEMENT);
             PreparedStatement descriptionStatement = connection.prepareStatement(SELECT_DESCRIPTION_STATEMENT);
             PreparedStatement imageStatement = connection.prepareStatement(SELECT_IMAGE_STATEMENT);
             if (finishedISBNs.contains(identificators.isbn)) {
                 System.out.println(
-                    ContentsUtil.ALREADY_PROCESSED_ISBN + identificators.isbn + FOR_BOOK_ID + identificators.bookId);
+                    ContentsUtil.ALREADY_PROCESSED_ISBN + identificators.isbn + FOR_BOOK_ID
+                        + identificators.bookId);
             } else {
                 ContentsDocument contentsDocument = this.createContentsDocument(identificators.isbn);
                 bookStatement.setString(1, identificators.bookId);
@@ -195,7 +195,8 @@ public class ContentsDatabaseExporter {
                         System.out.println(Instant.now());
                         System.out.println(ContentsUtil.THAT_DID_NOT_GO_WELL + e.getMessage());
                         ContentsUtil.appendToFailedIsbnFile(
-                            identificators.id + COMMA + identificators.isbn + COMMA + identificators.bookId, failed_file);
+                            identificators.id + COMMA + identificators.isbn + COMMA + identificators.bookId,
+                            failed_file);
                         e.printStackTrace();
                     }
                 } else {
@@ -203,7 +204,8 @@ public class ContentsDatabaseExporter {
                 }
                 finishedISBNs.add(identificators.isbn);
                 finishedIDs.add(identificators.id);
-                ContentsUtil.appendToFinishedIsbnFile(identificators.isbn + System.lineSeparator(), finished_isbn_file);
+                ContentsUtil.appendToFinishedIsbnFile(identificators.isbn + System.lineSeparator(),
+                    finished_isbn_file);
                 this.appendToFinishedIDFile(identificators.id + System.lineSeparator());
             }
         }
@@ -219,39 +221,40 @@ public class ContentsDatabaseExporter {
     }
 
     private void findImagePath(PreparedStatement statement, ContentsDocument contentsDocument) throws SQLException {
-        ResultSet resultSet = statement.executeQuery();
-        while (resultSet.next()) {
-            String type = resultSet.getString(COLUMN_TYPE);
-            String path = preventNullString(resultSet.getString(COLUMN_PATH));
-            path = this.dealWithOldBIBSYSpath(path);
-            path = IMAGES_BASE_URL + path;
-            if (this.isImagePresent(path)) {
-                switch (type) {
-                    case SMALL_IMAGE_TYPE:
-                        contentsDocument.imageSmall = path;
-                        break;
-                    case LARGE_IMAGE_TYPE:
-                        contentsDocument.imageLarge = path;
-                        break;
-                    case ORIGINAL_IMAGE_TYPE:
-                        contentsDocument.imageOriginal = path;
-                        break;
-                    default:
-                        if (!preventNullString(path).isEmpty()) {
-                            System.out.println(UNKNOWN_METADATA_TYPE + type);
-                            System.out.println(WITH_VALUE);
-                            System.out.println(path);
-                        }
-                        break;
+        try (ResultSet resultSet = statement.executeQuery()) {
+            while (resultSet.next()) {
+                String type = resultSet.getString(COLUMN_TYPE);
+                String path = preventNullString(resultSet.getString(COLUMN_PATH));
+                path = this.dealWithOldBIBSYSpath(path);
+                path = IMAGES_BASE_URL + path;
+                if (this.isImagePresent(path)) {
+                    switch (type) {
+                        case SMALL_IMAGE_TYPE:
+                            contentsDocument.imageSmall = path;
+                            break;
+                        case LARGE_IMAGE_TYPE:
+                            contentsDocument.imageLarge = path;
+                            break;
+                        case ORIGINAL_IMAGE_TYPE:
+                            contentsDocument.imageOriginal = path;
+                            break;
+                        default:
+                            if (!preventNullString(path).isEmpty()) {
+                                System.out.println(UNKNOWN_METADATA_TYPE + type);
+                                System.out.println(WITH_VALUE);
+                                System.out.println(path);
+                            }
+                            break;
+                    }
                 }
             }
-        }
-        if (StringUtils.isEmptyOrWhitespaceOnly(contentsDocument.source)) {
-            try {
-                final String source = resultSet.getString(COLUMN_SOURCE);
-                contentsDocument.source = preventNullString(source);
-            } catch (SQLException ex) {
-                contentsDocument.source = "BIBSYS";
+            if (StringUtils.isEmptyOrWhitespaceOnly(contentsDocument.source)) {
+                try {
+                    final String source = resultSet.getString(COLUMN_SOURCE);
+                    contentsDocument.source = preventNullString(source);
+                } catch (SQLException ex) {
+                    contentsDocument.source = "BIBSYS";
+                }
             }
         }
     }
@@ -298,56 +301,59 @@ public class ContentsDatabaseExporter {
 
     public void findDescriptionData(PreparedStatement statement, ContentsDocument contentsDocument)
         throws SQLException {
-        ResultSet resultSet = statement.executeQuery();
-        while (resultSet.next()) {
-            String type = resultSet.getString(COLUMN_TYPE);
-            String text = resultSet.getString(COLUMN_TEXT);
-            text = preventNullString(text);
-            text = Jsoup.clean(text, Whitelist.relaxed());
-            String descLong = EMPTY_STRING;
-            switch (type) {
-                case AUTHOR_TYPE:
-                    contentsDocument.author = text;
-                    break;
-                case CONTENTS_TYPE:
-                    contentsDocument.tableOfContents = text;
-                    break;
-                case SUMMARY_TYPE:
-                    contentsDocument.summary = text;
-                    break;
-                case REVIEW_TYPE:
-                    contentsDocument.review = text;
-                    break;
-                case PROMOTIONAL_TYPE:
-                    contentsDocument.promotional = text;
-                    break;
-                case DESCRIPTION_SHORT_TYPE:
-                    contentsDocument.descriptionShort = text;
-                    break;
-                case DESCRIPTION_LONG_TYPE:
-                    descLong = text;
-                    break;
-                default:
-                    if (!text.isEmpty()) {
-                        System.out.println(UNKNOWN_METADATA_TYPE + type);
-                        System.out.println(WITH_VALUE);
-                        System.out.println(text);
-                    }
-                    break;
+        try (ResultSet resultSet = statement.executeQuery()) {
+            while (resultSet.next()) {
+                String type = resultSet.getString(COLUMN_TYPE);
+                String text = resultSet.getString(COLUMN_TEXT);
+                text = preventNullString(text);
+                text = Jsoup.clean(text, Whitelist.relaxed());
+                String descLong = EMPTY_STRING;
+                switch (type) {
+                    case AUTHOR_TYPE:
+                        contentsDocument.author = text;
+                        break;
+                    case CONTENTS_TYPE:
+                        contentsDocument.tableOfContents = text;
+                        break;
+                    case SUMMARY_TYPE:
+                        contentsDocument.summary = text;
+                        break;
+                    case REVIEW_TYPE:
+                        contentsDocument.review = text;
+                        break;
+                    case PROMOTIONAL_TYPE:
+                        contentsDocument.promotional = text;
+                        break;
+                    case DESCRIPTION_SHORT_TYPE:
+                        contentsDocument.descriptionShort = text;
+                        break;
+                    case DESCRIPTION_LONG_TYPE:
+                        descLong = text;
+                        break;
+                    default:
+                        if (!text.isEmpty()) {
+                            System.out.println(UNKNOWN_METADATA_TYPE + type);
+                            System.out.println(WITH_VALUE);
+                            System.out.println(text);
+                        }
+                        break;
+                }
+                // do not add the long description field if it has the same text as the short description field
+                if (!descLong.equals(contentsDocument.descriptionShort) && !StringUtils.isEmptyOrWhitespaceOnly(
+                    descLong)) {
+                    contentsDocument.descriptionLong = descLong;
+                }
+                contentsDocument.source = preventNullString(resultSet.getString(COLUMN_SOURCE));
             }
-            // do not add the long description field if it has the same text as the short description field
-            if (!descLong.equals(contentsDocument.descriptionShort) && !StringUtils.isEmptyOrWhitespaceOnly(descLong)) {
-                contentsDocument.descriptionLong = descLong;
-            }
-            contentsDocument.source = preventNullString(resultSet.getString(COLUMN_SOURCE));
         }
     }
 
     private void findBookMetadata(PreparedStatement statement, ContentsDocument contentsDocument) throws SQLException {
-        ResultSet resultSet = statement.executeQuery();
-        while (resultSet.next()) {
-            contentsDocument.title = preventNullString(resultSet.getString(COLUMN_TITLE));
-            contentsDocument.dateOfPublication = preventNullString(resultSet.getString(COLUMN_YEAR));
+        try (ResultSet resultSet = statement.executeQuery()) {
+            while (resultSet.next()) {
+                contentsDocument.title = preventNullString(resultSet.getString(COLUMN_TITLE));
+                contentsDocument.dateOfPublication = preventNullString(resultSet.getString(COLUMN_YEAR));
+            }
         }
     }
 
