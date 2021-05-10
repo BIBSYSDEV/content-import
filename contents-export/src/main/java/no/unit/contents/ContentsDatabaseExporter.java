@@ -99,8 +99,11 @@ public class ContentsDatabaseExporter {
         if (!finished_id_file.exists()) {
             finished_id_file.createNewFile();
         }
-//        List<String> idList = FileUtils.readLines(finished_id_file, StandardCharsets.UTF_8);
-//        lastId = Collections.max(idList);
+        List<String> idList = FileUtils.readLines(finished_id_file, StandardCharsets.UTF_8);
+        lastId = String.valueOf(idList.stream()
+                .mapToInt(Integer::parseInt)
+                .max()
+                .orElse(-1));
         System.out.println(ContentsUtil.LAST_PROCESSED_ID_WAS + ContentsDatabaseExporter.lastId);
         if (!finished_isbn_file.exists()) {
             finished_isbn_file.createNewFile();
