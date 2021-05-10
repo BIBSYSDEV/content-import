@@ -33,7 +33,7 @@ test {
 
 jar {
     manifest{
-        attributes ('Main-Class': 'no.unit.contents.ContentsFileImporter')
+        attributes ('Main-Class': 'no.unit.contents.ContentsDatabaseExporter')
     }
     from {
         configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }

@@ -21,7 +21,7 @@ import java.nio.charset.StandardCharsets;
 public class ContentsUtil {
 
 
-    private static final String CONTENTS_API_URL = "https://api.sandbox.bibs.aws.unit.no/contents";
+    private static final String CONTENTS_API_URL = "https://api.bibs.aws.unit.no/contents";
     public static final String ALREADY_PROCESSED_ISBN = "Already processed isbn ";
     public static final String THAT_DID_NOT_GO_WELL = "That did not go well: ";
     public static final String NUMBER_OF_ISBN_SEND = "Number of isbn send: ";
@@ -31,7 +31,7 @@ public class ContentsUtil {
     public static final String SENDING = "SENDING...";
     public static final String RESPONSE = "RESPONSE: ";
     public static final String FAILED_TO_APPEND_TO_FILE = "Failed to append to file ";
-    public static final String LAST_PROCESSED_ISBN_WAS = "last processed isbn was: ";
+    public static final String LAST_PROCESSED_ID_WAS = "last processed id was: ";
     public static final String ISBNS_TO_PROCESS = "We have %d ISBNs to process.%n";
     public static final String DONE_WITH_ISBNS = "Done with %d isbns%n";
 

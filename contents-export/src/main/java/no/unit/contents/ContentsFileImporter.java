@@ -49,7 +49,7 @@ public class ContentsFileImporter {
         if (!finishedISBNs.isEmpty()) {
             lastIsbn = finishedISBNs.last();
         }
-        System.out.println(ContentsUtil.LAST_PROCESSED_ISBN_WAS + lastIsbn);
+        System.out.println(ContentsUtil.LAST_PROCESSED_ID_WAS + lastIsbn);
         nielsenFileReader.loadData();
         Set<String> isbnSet = nielsenFileReader.getIsbnRecordSet();
         System.out.printf("we found %d metadataRecords %n", isbnSet.size());
