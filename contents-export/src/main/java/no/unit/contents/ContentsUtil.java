@@ -84,11 +84,11 @@ public class ContentsUtil {
         CloseableHttpClient httpclient = HttpClients.createDefault();
         HttpPost httppost = new HttpPost(CONTENTS_API_URL);
 
-        StringEntity entity = new StringEntity(payload);
+        StringEntity entity = new StringEntity(payload, StandardCharsets.UTF_8);
         entity.setContentType(ContentType.APPLICATION_JSON.getMimeType());
 
         httppost.setEntity(entity);
-        httppost.setHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_TYPE.toString());
+        httppost.setHeader(HttpHeaders.CONTENT_TYPE, "application/json; charset=utf-8");
 
         //Execute and get the response.
         HttpResponse response = httpclient.execute(httppost);
