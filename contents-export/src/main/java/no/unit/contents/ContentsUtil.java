@@ -5,13 +5,13 @@ import org.apache.commons.io.FileUtils;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.methods.HttpPost;
+import org.apache.http.client.methods.HttpPut;
 import org.apache.http.entity.ContentType;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
 
 import javax.ws.rs.core.HttpHeaders;
-import javax.ws.rs.core.MediaType;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
@@ -108,4 +108,40 @@ public class ContentsUtil {
         return null;
     }
 
+    protected static String updateContents(String payload) throws IOException {
+        CloseableHttpClient httpclient = HttpClients.createDefault();
+        HttpPut httpput = new HttpPut(CONTENTS_API_URL);
+
+        StringEntity entity = new StringEntity(payload, StandardCharsets.UTF_8);
+        entity.setContentType(ContentType.APPLICATION_JSON.getMimeType());
+
+        httpput.setEntity(entity);
+        httpput.setHeader(HttpHeaders.CONTENT_TYPE, "application/json; charset=utf-8");
+
+        //Execute and get the response.
+        HttpResponse response = httpclient.execute(httpput);
+        HttpEntity responseEntity = response.getEntity();
+
+        if (responseEntity != null) {
+            try (BufferedReader br = new BufferedReader(
+                    new InputStreamReader(responseEntity.getContent(), StandardCharsets.UTF_8))) {
+                StringBuilder resp = new StringBuilder();
+                String responseLine;
+                while ((responseLine = br.readLine()) != null) {
+                    resp.append(responseLine.trim());
+                }
+                return resp.toString();
+            }
+        }
+        return null;
+    }
+
+    public static void appendToInsufficientIsbnFile(String insufficientIsbn, File file) {
+        try {
+            FileUtils.writeStringToFile(file, insufficientIsbn, StandardCharsets.UTF_8, true);
+        } catch (IOException e) {
+            System.out.println(FAILED_TO_APPEND_TO_FILE + e.getMessage());
+            e.printStackTrace();
+        }
+    }
 }

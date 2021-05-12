@@ -11,11 +11,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mysql.jdbc.StringUtils;
 
-import java.util.Collections;
-import java.util.SortedSet;
-import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
@@ -77,10 +73,11 @@ public class ContentsDatabaseExporter {
     public static final String ESCAPED_DOT = "\\.";
 
     private static final File failed_file = new File("failedIsbn.csv");
+    private static final File crashed_file = new File("crashedIsbn.txt");
     private static final File finished_isbn_file = new File("processedIsbns.txt");
     private static final File finished_id_file = new File("processedIds.txt");
+    private static final File insufficient_isbn_file = new File("insufficient.txt");
     private static CopyOnWriteArrayList<String> finishedISBNs = new CopyOnWriteArrayList<>();
-    //    private static SortedSet<String> finishedIDs = new ConcurrentSkipListSet<>();
     private static String lastId = "0";
 
     private final ObjectMapper mapper = new ObjectMapper();
@@ -96,6 +93,12 @@ public class ContentsDatabaseExporter {
         if (!failed_file.exists()) {
             failed_file.createNewFile();
         }
+        if (!crashed_file.exists()) {
+            crashed_file.createNewFile();
+        }
+        if (!insufficient_isbn_file.exists()) {
+            insufficient_isbn_file.createNewFile();
+        }
         if (!finished_id_file.exists()) {
             finished_id_file.createNewFile();
         }
@@ -103,7 +106,7 @@ public class ContentsDatabaseExporter {
         lastId = String.valueOf(idList.stream()
                 .mapToInt(Integer::parseInt)
                 .max()
-                .orElse(-1));
+                .orElse(0));
         System.out.println(ContentsUtil.LAST_PROCESSED_ID_WAS + ContentsDatabaseExporter.lastId);
         if (!finished_isbn_file.exists()) {
             finished_isbn_file.createNewFile();
@@ -150,8 +153,8 @@ public class ContentsDatabaseExporter {
             }
         }
         System.out.printf(ContentsUtil.ISBNS_TO_PROCESS, isbnBookIdList.size());
-        //split list in 5 sublist and run them in parallel
-        final Iterable<List<Identificators>> partition = Iterables.partition(isbnBookIdList, isbnBookIdList.size() / 5);
+        //split list in 20 sublist and run them in parallel
+        final Iterable<List<Identificators>> partition = Iterables.partition(isbnBookIdList, isbnBookIdList.size() / 20);
         partition.forEach(part -> {
             Stream<Identificators> stream = part.parallelStream();
             stream.forEach(identificators -> {
@@ -191,7 +194,7 @@ public class ContentsDatabaseExporter {
                     String payload = mapper.writeValueAsString(contentsPayload);
                     try {
                         System.out.println(ContentsUtil.SENDING + payload);
-                        String response = ContentsUtil.sendContents(payload);
+                        String response = ContentsUtil.updateContents(payload);
                         System.out.println(ContentsUtil.RESPONSE + response);
                         if (!response.contains("\"statusCode\" : 201")) {
                             ContentsUtil.appendToFailedIsbnFile(
@@ -204,11 +207,13 @@ public class ContentsDatabaseExporter {
                         System.err.println(ContentsUtil.THAT_DID_NOT_GO_WELL + e.getMessage());
                         ContentsUtil.appendToFailedIsbnFile(
                                 identificators.id + COMMA + identificators.isbn + COMMA + identificators.bookId + System.lineSeparator(),
-                                failed_file);
+                                crashed_file);
                         e.printStackTrace();
                     }
                 } else {
                     System.err.println(ContentsUtil.INSUFFICIENT_DATA_ON_CONTENTS + identificators.isbn);
+                    ContentsUtil.appendToInsufficientIsbnFile(identificators.isbn + System.lineSeparator(),
+                            insufficient_isbn_file);
                 }
                 finishedISBNs.add(identificators.isbn);
                 ContentsUtil.appendToFinishedIsbnFile(identificators.isbn + System.lineSeparator(),
