@@ -113,7 +113,7 @@ public class ContentsDatabaseExporter {
         }
         finishedISBNs.addAll(FileUtils.readLines(finished_isbn_file, StandardCharsets.UTF_8));
         if (args.length > 0) {
-            List<Identificators> isbnBookIdList = exporter.readFromFailedFile();
+            List<Identificators> isbnBookIdList = exporter.readFromInputFile(args[0]);
             exporter.export(isbnBookIdList);
         } else {
             exporter.export();
@@ -121,9 +121,10 @@ public class ContentsDatabaseExporter {
         System.out.println("Finished " + Instant.now());
     }
 
-    private List<Identificators> readFromFailedFile() throws IOException {
+    private List<Identificators> readFromInputFile(String filename) throws IOException {
         List<Identificators> identificatorsList = new CopyOnWriteArrayList<>();
-        List<String> lines = FileUtils.readLines(failed_file, StandardCharsets.UTF_8);
+        File inputfile = new File(filename);
+        List<String> lines = FileUtils.readLines(inputfile, StandardCharsets.UTF_8);
         for (String line : lines) {
             String[] split = line.split(COMMA);
             identificatorsList.add(new Identificators(split[0], split[1], split[2]));
@@ -196,7 +197,7 @@ public class ContentsDatabaseExporter {
                         System.out.println(ContentsUtil.SENDING + payload);
                         String response = ContentsUtil.updateContents(payload);
                         System.out.println(ContentsUtil.RESPONSE + response);
-                        if (!response.contains("\"statusCode\" : 201")) {
+                        if (!response.contains("\"statusCode\" : 20")) {
                             ContentsUtil.appendToFailedIsbnFile(
                                     identificators.id + COMMA + identificators.isbn + COMMA + identificators.bookId + System.lineSeparator(),
                                     failed_file);
