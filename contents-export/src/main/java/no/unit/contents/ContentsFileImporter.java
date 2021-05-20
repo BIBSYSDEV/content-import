@@ -22,7 +22,8 @@ public class ContentsFileImporter {
     private final ObjectMapper mapper = new ObjectMapper();
     private final NielsenFileReader nielsenFileReader;
     //TODO: remove breaks for testing
-    private final int HARD_STOPP = 10;
+    private static int maxNumberOfUpdates = -1;
+    private int counter = 0;
 
     public ContentsFileImporter() {
         mapper.setSerializationInclusion(JsonInclude.Include.NON_NULL).writerWithDefaultPrettyPrinter();
@@ -39,12 +40,14 @@ public class ContentsFileImporter {
             finished_isbn_file.createNewFile();
         }
         finishedISBNs.addAll(FileUtils.readLines(finished_isbn_file, StandardCharsets.UTF_8));
+        if (args != null && args.length > 0) {
+            maxNumberOfUpdates = Integer.parseInt(args[0]);
+        }
         translocater.transfer();
         System.out.println("Finished " + Instant.now());
     }
 
     private void transfer() throws JsonProcessingException {
-        List<ContentsDocument> contentsList = new ArrayList<>();
         String lastIsbn = "0";
         if (!finishedISBNs.isEmpty()) {
             lastIsbn = finishedISBNs.last();
@@ -63,7 +66,7 @@ public class ContentsFileImporter {
             List<Record> recordList = nielsenFileReader.readFile(file);
             for (Record record : recordList) {
                 this.exportIsbnToDynamoDBFullContentsDocument(record);
-                if (finishedISBNs.size() > HARD_STOPP) {
+                if (counter >= maxNumberOfUpdates && maxNumberOfUpdates != -1) {
                     System.exit(0);
                 }
                 isbnSet.remove(record.getIsbn13());
@@ -129,8 +132,14 @@ public class ContentsFileImporter {
             String payload = mapper.writeValueAsString(contentsPayload);
             try {
                 System.out.println(ContentsUtil.SENDING + payload);
-                String response = ContentsUtil.sendContents(payload);
+                String response = ContentsUtil.updateContents(payload);
                 System.out.println(ContentsUtil.RESPONSE + response);
+                if (!(response != null && response.contains("\"statusCode\" : 20"))) {
+                    ContentsUtil.appendToFailedIsbnFile(isbn, failed_file);
+                    System.err.printf("isbn %s failed!%n", isbn);
+                } else {
+                    counter++;
+                }
             } catch (Exception e) {
                 System.out.println(Instant.now());
                 System.out.println(ContentsUtil.THAT_DID_NOT_GO_WELL + e.getMessage());
