@@ -14,6 +14,7 @@ import java.util.*;
 public class ContentsFileImporter {
 
     private static final File failed_file = new File("failedIsbn_fromFile.csv");
+    private static final File insufficient_isbn_file = new File("insufficient_fromFile.txt");
     private static final File finished_isbn_file = new File("processedIsbns_fromFile.txt");
     public static final String TEMP_NIELSEN_IMAGES_URL = "https://utvikle.oria.no/Nielsen/images/";
     public static final String JPG_FILE_EXTENSION = ".jpg";
@@ -35,6 +36,9 @@ public class ContentsFileImporter {
         ContentsFileImporter translocater = new ContentsFileImporter();
         if (!failed_file.exists()) {
             failed_file.createNewFile();
+        }
+        if (!insufficient_isbn_file.exists()) {
+            insufficient_isbn_file.createNewFile();
         }
         if (!finished_isbn_file.exists()) {
             finished_isbn_file.createNewFile();
@@ -66,7 +70,7 @@ public class ContentsFileImporter {
             List<Record> recordList = nielsenFileReader.readFile(file);
             for (Record record : recordList) {
                 this.exportIsbnToDynamoDBFullContentsDocument(record);
-                if (counter >= maxNumberOfUpdates && maxNumberOfUpdates != -1) {
+                if (counter >= maxNumberOfUpdates) {
                     System.exit(0);
                 }
                 isbnSet.remove(record.getIsbn13());
@@ -135,19 +139,21 @@ public class ContentsFileImporter {
                 String response = ContentsUtil.updateContents(payload);
                 System.out.println(ContentsUtil.RESPONSE + response);
                 if (!(response != null && response.contains("\"statusCode\" : 20"))) {
-                    ContentsUtil.appendToFailedIsbnFile(isbn, failed_file);
+                    ContentsUtil.appendToFailedIsbnFile(isbn + System.lineSeparator(), failed_file);
                     System.err.printf("isbn %s failed!%n", isbn);
                 } else {
                     counter++;
+                    System.out.println("Counter: " + counter + "  =>  " + (counter * 100/maxNumberOfUpdates) + " % done.");
                 }
             } catch (Exception e) {
                 System.out.println(Instant.now());
                 System.out.println(ContentsUtil.THAT_DID_NOT_GO_WELL + e.getMessage());
-                ContentsUtil.appendToFailedIsbnFile(isbn, failed_file);
+                ContentsUtil.appendToFailedIsbnFile(isbn+ System.lineSeparator(), failed_file);
                 e.printStackTrace();
             }
         } else {
             System.out.println(ContentsUtil.INSUFFICIENT_DATA_ON_CONTENTS + isbn);
+            ContentsUtil.appendToInsufficientIsbnFile(isbn + System.lineSeparator(), insufficient_isbn_file);
         }
         finishedISBNs.add(isbn);
         ContentsUtil.appendToFinishedIsbnFile(isbn + System.lineSeparator(), finished_isbn_file);
