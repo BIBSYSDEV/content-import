@@ -146,13 +146,14 @@ public class ContentsFileImporter {
                     System.out.println("Counter: " + counter + "  =>  " + (counter * 100/maxNumberOfUpdates) + " % done.");
                 }
             } catch (Exception e) {
-                System.out.println(Instant.now());
-                System.out.println(ContentsUtil.THAT_DID_NOT_GO_WELL + e.getMessage());
+                System.err.println(Instant.now());
+                System.err.println(ContentsUtil.THAT_DID_NOT_GO_WELL + e.getMessage());
                 ContentsUtil.appendToFailedIsbnFile(isbn+ System.lineSeparator(), failed_file);
                 e.printStackTrace();
             }
         } else {
-            System.out.println(ContentsUtil.INSUFFICIENT_DATA_ON_CONTENTS + isbn);
+            System.err.println(ContentsUtil.INSUFFICIENT_DATA_ON_CONTENTS + isbn);
+            System.err.println("invalid document:" + mapper.writeValueAsString(contentsDocument));
             ContentsUtil.appendToInsufficientIsbnFile(isbn + System.lineSeparator(), insufficient_isbn_file);
         }
         finishedISBNs.add(isbn);
